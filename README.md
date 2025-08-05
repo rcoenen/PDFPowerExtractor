@@ -25,12 +25,20 @@ To human eyes viewing the PDF, it's obvious that "Full-time" answers question 3.
 
 ## 💡 The Solution
 
-PDFPowerExtractor uses visual AI processing to preserve form field relationships, making filled PDFs readable to AI models while minimizing costs through intelligent page routing.
+PDFPowerExtractor uses visual AI processing to preserve form field relationships, **enriching PDF-to-text extraction for downstream AI systems** while keeping context structurally sound.
 
+**Why This Matters for AI Systems:**
+- AI models need questions and answers in the same context to understand form data
+- Traditional extraction breaks spatial relationships that are critical for comprehension
+- Enhanced extraction enables accurate AI analysis of form submissions, applications, and surveys
+- Preserves the visual context that makes forms interpretable to AI systems
+
+**Key Benefits:**
 - ✅ Preserves checkbox states: ☒ (checked) vs ☐ (unchecked)
 - ✅ Maintains radio button selections: ● (selected) vs ○ (unselected)  
-- ✅ Keeps Q&A relationships intact
+- ✅ Keeps Q&A relationships intact for AI processing
 - ✅ 30-40% cheaper than pure AI processing
+- ✅ Feeds clean, contextual data to AI systems for analysis
 
 ## 🚀 Quick Start
 
@@ -51,6 +59,8 @@ python pdfpower.py extract your-form.pdf
 
 ## 💰 Costs
 
+**OpenRouter pricing (August 2025)** - Direct API access may be cheaper
+
 Average cost per 10-page document: **~$0.0014** (less than 0.2 cents)
 
 | Pages | All Form Fields | Typical (36% text) |
@@ -63,10 +73,12 @@ Average cost per 10-page document: **~$0.0014** (less than 0.2 cents)
 
 ### ✅ Models with 100% Accuracy
 
-| Model | Provider | Cost/M tokens | Context | Notes |
-|-------|----------|---------------|---------|-------|
+| Model | Provider | Cost/M tokens (OpenRouter) | Context | Notes |
+|-------|----------|---------------------------|---------|-------|
 | **google/gemini-2.5-flash** | Google | $0.075/$0.30 | 1M+ | **RECOMMENDED** - Best value |
 | anthropic/claude-3-haiku | Anthropic | $0.25/$1.25 | 200K | Reliable backup |
+
+*Note: Costs shown are OpenRouter pricing (August 2025). Direct API access may offer lower rates.*
 
 ### ❌ Models That Failed
 
