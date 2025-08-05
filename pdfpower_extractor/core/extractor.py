@@ -100,7 +100,7 @@ Preserve the visual layout and relationships between questions and answers."""
             content = result['choices'][0]['message']['content']
             
             # Calculate approximate cost
-            from models.config import MODEL_CONFIGS, DEFAULT_MODEL
+            from ..models.config import MODEL_CONFIGS, DEFAULT_MODEL
             model_config = MODEL_CONFIGS.get(model, MODEL_CONFIGS[DEFAULT_MODEL])
             cost = model_config['cost_per_page']
             

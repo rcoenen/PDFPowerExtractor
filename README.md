@@ -40,21 +40,59 @@ PDFPowerExtractor uses visual AI processing to preserve form field relationships
 - ✅ 30-40% cheaper than pure AI processing
 - ✅ Feeds clean, contextual data to AI systems for analysis
 
+## 🚀 Installation
+
+### Option 1: Install from PyPI (Coming Soon)
+```bash
+pip install pdfpower-extractor
+```
+
+### Option 2: Install from GitHub
+```bash
+pip install git+https://github.com/rcoenen/PDFPowerExtractor.git
+```
+
+### Option 3: Local Development
+```bash
+# Clone the repository
+git clone https://github.com/rcoenen/PDFPowerExtractor.git
+cd PDFPowerExtractor
+
+# Install in development mode
+pip install -e .
+```
+
 ## 🚀 Quick Start
 
 ```bash
-# Clone the repository
-git clone https://github.com/yourusername/PDFPowerExtractor.git
-cd PDFPowerExtractor
-
-# Install dependencies
-pip install -r requirements.txt
-
 # Set your OpenRouter API key
 export OPENROUTER_API_KEY="your-key-here"
 
-# Extract a PDF
-python pdfpower.py extract your-form.pdf
+# Extract a PDF (command available globally after installation)
+pdfpower extract your-form.pdf
+
+# Or analyze before processing
+pdfpower analyze your-form.pdf
+
+# List supported models
+pdfpower models
+```
+
+## 📦 Using as a Library
+
+```python
+from core.processor import HybridPDFProcessor
+from core.analyzer import PDFAnalyzer
+
+# Analyze a PDF
+analyzer = PDFAnalyzer("your-form.pdf")
+summary = analyzer.analyze()
+print(f"Potential savings: {summary['savings_percentage']:.1f}%")
+
+# Process a PDF
+processor = HybridPDFProcessor("your-form.pdf", "your-openrouter-key")
+result = processor.process(model="google/gemini-2.5-flash")
+processor.save_results(result, "output.txt")
 ```
 
 ## 💰 Costs

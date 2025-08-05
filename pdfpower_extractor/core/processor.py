@@ -138,7 +138,7 @@ class HybridPDFProcessor:
     def _create_header(self, summary: Dict, model: str, cost: float) -> str:
         """Create extraction result header"""
         
-        from models.config import MODEL_CONFIGS
+        from ..models.config import MODEL_CONFIGS
         model_info = MODEL_CONFIGS.get(model, {
             'name': model,
             'provider': 'Via OpenRouter',

@@ -1,0 +1,51 @@
+# Include documentation
+include README.md
+include LICENSE
+include QUICKSTART.md
+include TECHNICAL_DETAILS.md
+
+# Include requirements
+include requirements.txt
+
+# Include package configuration
+include pyproject.toml
+include setup.py
+
+# Include examples (but not actual PDF files)
+include examples/README.md
+
+# Include model configurations
+include models/*.py
+
+# Exclude sensitive or generated files
+exclude .env
+exclude .env.example
+exclude *.pdf
+exclude extracted-*.txt
+exclude hybrid-extraction-*.txt
+
+# Exclude development files
+exclude test_*.py
+exclude tests/*
+exclude .pytest_cache/*
+exclude .coverage
+exclude htmlcov/*
+
+# Exclude IDE and OS files
+exclude .DS_Store
+exclude .vscode/*
+exclude .idea/*
+exclude *.swp
+exclude *.swo
+
+# Exclude git files
+exclude .git/*
+exclude .gitignore
+
+# Exclude build artifacts
+exclude dist/*
+exclude build/*
+exclude *.egg-info/*
+exclude __pycache__/*
+recursive-exclude * __pycache__
+recursive-exclude * *.py[co]

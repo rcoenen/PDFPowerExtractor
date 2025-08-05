@@ -4,7 +4,7 @@ PDF Page Analyzer - Detects form fields vs pure text pages
 
 import fitz  # PyMuPDF
 from typing import List, Dict
-from models.config import MODEL_CONFIGS, DEFAULT_MODEL
+from ..models.config import MODEL_CONFIGS, DEFAULT_MODEL
 
 
 class PDFAnalyzer:

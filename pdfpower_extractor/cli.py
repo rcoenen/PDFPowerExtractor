@@ -15,9 +15,9 @@ load_dotenv()
 # Add core modules to path
 sys.path.append(os.path.dirname(os.path.abspath(__file__)))
 
-from core.processor import HybridPDFProcessor
-from core.analyzer import PDFAnalyzer
-from models.config import MODEL_CONFIGS, DEFAULT_MODEL
+from .core.processor import HybridPDFProcessor
+from .core.analyzer import PDFAnalyzer
+from .models.config import MODEL_CONFIGS, DEFAULT_MODEL
 
 @click.group()
 @click.version_option(version='1.0.0')
