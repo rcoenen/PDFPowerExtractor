@@ -66,11 +66,26 @@ class AIExtractor:
                 "Content-Type": "application/json"
             }
             
-            prompt = """Extract all text from this form page exactly as it appears. 
-For form fields:
-- Radio buttons: use ● for selected and ○ for unselected
-- Checkboxes: use ☒ for checked and ☐ for unchecked
-Preserve the visual layout and relationships between questions and answers."""
+            prompt = """Extract all text from this form page. 
+
+For TEXT FIELDS with filled-in values:
+- Combine the label and its value on ONE LINE
+- If a value appears in a shaded/colored box, put it on the same line as its label
+- Use a colon to separate label from value
+- Example: "Name field: John_Doe"
+
+For RADIO BUTTONS and CHECKBOXES:
+- Put the question/label on its own line with a colon
+- List each option on a separate line below
+- Use ● for selected and ○ for unselected radio buttons
+- Use ☒ for checked and ☐ for unchecked checkboxes
+- Example format:
+  "Question text:"
+  "● selected option"
+  "○ unselected option"
+  "○ another unselected option"
+
+IMPORTANT: Text fields get their values on the same line, but radio/checkbox groups get options on separate lines."""
             
             data = {
                 "model": model,

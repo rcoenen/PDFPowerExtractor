@@ -60,17 +60,40 @@ class HybridPDFProcessor:
         return None
     
     def process(
-        self, 
+        self,
         model: str = "google/gemini-2.5-flash",
-        progress_callback: Optional[Callable[[Any], None]] = None
+        progress_callback: Optional[Callable[[Any], None]] = None,
+        force_ai_extraction: bool = False,
     ) -> str:
         """Process the PDF using hybrid approach"""
-        
+
         start_time = time.time()
-        
+
         # Analyze PDF structure
         summary = self.analyzer.analyze()
-        
+
+        # Optionally bypass hybrid mode and force AI on all non-empty pages
+        if force_ai_extraction:
+            # Copy so we don't mutate cached summary
+            summary = dict(summary)
+            total_pages = summary["total_pages"]
+            empty_pages = set(summary.get("empty_pages", []))
+            forced_form_pages = [p for p in range(1, total_pages + 1) if p not in empty_pages]
+            summary["form_pages"] = forced_form_pages
+            summary["text_pages"] = []
+            # Recompute cost metrics based on forced AI pages
+            cost_per_page = summary["full_ai_cost"] / total_pages if total_pages else 0.0
+            hybrid_cost = len(forced_form_pages) * cost_per_page
+            savings = summary["full_ai_cost"] - hybrid_cost
+            summary.update(
+                {
+                    "hybrid_cost": hybrid_cost,
+                    "savings": savings,
+                    "savings_percentage": (savings / summary["full_ai_cost"] * 100) if summary["full_ai_cost"] else 0,
+                    "force_ai_extraction": True,
+                }
+            )
+
         # Track progress
         total_pages = summary['total_pages']
         processed = 0
@@ -79,7 +102,7 @@ class HybridPDFProcessor:
         results: Dict[int, Dict[str, Any]] = {}
         total_cost = 0.0
         page_modes: Dict[int, str] = {}
-        
+
         def emit(status: str, page_num: int, mode: str):
             if progress_callback:
                 try:
@@ -107,7 +130,7 @@ class HybridPDFProcessor:
             page_modes[page_num] = "TEXT-EXTRACTION"
             processed += 1
             emit("done", page_num, "text_extraction")
-        
+
         # Process form pages with AI
         for page_num in summary['form_pages']:
             emit("start", page_num, "ai_extraction")
@@ -138,14 +161,14 @@ class HybridPDFProcessor:
             page_modes[page_num] = "EMPTY"
             processed += 1
             emit("done", page_num, "skipped")
-        
+
         emit("done", processed, "complete")
-        
+
         # Store metrics
         self.last_duration = time.time() - start_time
         self.last_cost = total_cost
         self.page_modes = page_modes
-        
+
         # Merge results in order with explicit headers, stripping any internal page headers
         merged_content = []
         for page_num in sorted(results.keys()):
@@ -163,22 +186,26 @@ class HybridPDFProcessor:
                 "=" * 80,
             ])
             merged_content.append(f"{header}\n{cleaned}".rstrip() + "\n")
-        
+
         # Create header
         header = self._create_header(summary, model, total_cost)
-        
+
         return header + '\n'.join(merged_content)
     
     def _create_header(self, summary: Dict, model: str, cost: float) -> str:
         """Create extraction result header"""
-        
+
         from ..models.config import MODEL_CONFIGS
         model_info = MODEL_CONFIGS.get(model, {
             'name': model,
             'provider': 'Via OpenRouter',
             'context_window': 'Unknown'
         })
-        
+
+        mode_line = ""
+        if summary.get("force_ai_extraction"):
+            mode_line = "Mode: Forced AI on all non-empty pages (hybrid bypassed)\n"
+
         header = f"""PDF EXTRACTION RESULTS
 {'='*80}
 Source PDF: {os.path.basename(self.pdf_path)}
@@ -190,6 +217,7 @@ AI Model: {model}
 - Name: {model_info['name']}
 - Provider: {model_info['provider']}
 - Context: {model_info['context_window']}
+{mode_line if mode_line else ""}
 
 Processing Summary:
 - Total pages: {summary['total_pages']}
