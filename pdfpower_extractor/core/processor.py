@@ -132,24 +132,31 @@ class HybridPDFProcessor:
             emit("done", page_num, "text_extraction")
 
         # Process form pages with AI
-        for page_num in summary['form_pages']:
-            emit("start", page_num, "ai_extraction")
-            
-            result = self.ai_extractor.extract_page(
-                self.pdf_path, 
-                page_num,
+        batch_size = 5
+        form_pages = summary['form_pages']
+        for i in range(0, len(form_pages), batch_size):
+            batch = form_pages[i:i + batch_size]
+            # mark batch start
+            for page_num in batch:
+                emit("start", page_num, "ai_extraction")
+
+            content_map, batch_cost = self.ai_extractor.extract_pages_batch(
+                self.pdf_path,
+                batch,
                 model=model
             )
-            
-            results[page_num] = {
-                'content': result['content'],
-                'method': 'ai_extraction',
-                'cost': result['cost']
-            }
-            page_modes[page_num] = "AI-VISION-EXTRACTION"
-            total_cost += result['cost']
-            processed += 1
-            emit("done", page_num, "ai_extraction")
+
+            for page_num in batch:
+                page_content = content_map.get(page_num) or f"\n=== Page {page_num} (Error) ===\nAI extraction failed: missing content\n"
+                results[page_num] = {
+                    'content': page_content,
+                    'method': 'ai_extraction',
+                    'cost': batch_cost / len(batch) if batch else 0.0
+                }
+                page_modes[page_num] = "AI-VISION-EXTRACTION"
+                processed += 1
+                emit("done", page_num, "ai_extraction")
+            total_cost += batch_cost
         
         # Skip empty pages
         for page_num in summary['empty_pages']:
