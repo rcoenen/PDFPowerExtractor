@@ -6,7 +6,7 @@ import os
 import hashlib
 import time
 from datetime import datetime
-from typing import List, Dict, Optional, Callable
+from typing import List, Dict, Optional, Callable, Any
 import glob
 import json
 
@@ -26,6 +26,7 @@ class HybridPDFProcessor:
         self.last_cost = 0.0
         self.last_duration = 0.0
         self._md5_hash = None
+        self.page_modes: Dict[int, str] = {}
     
     def calculate_md5(self) -> str:
         """Calculate MD5 hash of the PDF file"""
@@ -61,7 +62,7 @@ class HybridPDFProcessor:
     def process(
         self, 
         model: str = "google/gemini-2.5-flash",
-        progress_callback: Optional[Callable] = None
+        progress_callback: Optional[Callable[[Any], None]] = None
     ) -> str:
         """Process the PDF using hybrid approach"""
         
@@ -75,25 +76,41 @@ class HybridPDFProcessor:
         processed = 0
         
         # Process results
-        results = {}
+        results: Dict[int, Dict[str, Any]] = {}
         total_cost = 0.0
+        page_modes: Dict[int, str] = {}
+        
+        def emit(status: str, page_num: int, mode: str):
+            if progress_callback:
+                try:
+                    progress_callback({
+                        "status": status,
+                        "page": page_num,
+                        "total": total_pages,
+                        "mode": mode
+                    })
+                except Exception:
+                    # Fall back to legacy percentage callback
+                    try:
+                        progress_callback(int(processed / total_pages * 100))
+                    except Exception:
+                        pass
         
         # Extract text from pure text pages
         for page_num in summary['text_pages']:
-            if progress_callback:
-                progress_callback(int(processed / total_pages * 100))
-            
+            emit("start", page_num, "text_extraction")
             results[page_num] = {
                 'content': self.text_extractor.extract_page(self.pdf_path, page_num),
                 'method': 'text_extraction',
                 'cost': 0.0
             }
+            page_modes[page_num] = "TEXT-EXTRACTION"
             processed += 1
+            emit("done", page_num, "text_extraction")
         
         # Process form pages with AI
         for page_num in summary['form_pages']:
-            if progress_callback:
-                progress_callback(int(processed / total_pages * 100))
+            emit("start", page_num, "ai_extraction")
             
             result = self.ai_extractor.extract_page(
                 self.pdf_path, 
@@ -106,34 +123,51 @@ class HybridPDFProcessor:
                 'method': 'ai_extraction',
                 'cost': result['cost']
             }
+            page_modes[page_num] = "AI-VISION-EXTRACTION"
             total_cost += result['cost']
             processed += 1
+            emit("done", page_num, "ai_extraction")
         
         # Skip empty pages
         for page_num in summary['empty_pages']:
             results[page_num] = {
-                'content': f"\n=== Page {page_num} (Empty) ===\n[This page is empty]\n",
+                'content': "[This page is empty]\n",
                 'method': 'skipped',
                 'cost': 0.0
             }
+            page_modes[page_num] = "EMPTY"
             processed += 1
+            emit("done", page_num, "skipped")
         
-        if progress_callback:
-            progress_callback(100)
+        emit("done", processed, "complete")
         
         # Store metrics
         self.last_duration = time.time() - start_time
         self.last_cost = total_cost
+        self.page_modes = page_modes
         
-        # Merge results in order
+        # Merge results in order with explicit headers, stripping any internal page headers
         merged_content = []
         for page_num in sorted(results.keys()):
-            merged_content.append(results[page_num]['content'])
+            mode_label = page_modes.get(page_num, "unknown")
+            body = (results[page_num]['content'] or "").splitlines()
+            # drop leading blanks and internal headers like "=== Page"
+            while body and not body[0].strip():
+                body = body[1:]
+            while body and body[0].lstrip().startswith("==="):
+                body = body[1:]
+            cleaned = "\n".join(body).strip()
+            header = "\n".join([
+                "=" * 80,
+                f"=== Page {page_num} of {total_pages} === METHOD: {mode_label}",
+                "=" * 80,
+            ])
+            merged_content.append(f"{header}\n{cleaned}".rstrip() + "\n")
         
         # Create header
         header = self._create_header(summary, model, total_cost)
         
-        return header + '\n\n'.join(merged_content)
+        return header + '\n'.join(merged_content)
     
     def _create_header(self, summary: Dict, model: str, cost: float) -> str:
         """Create extraction result header"""
