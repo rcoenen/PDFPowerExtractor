@@ -237,11 +237,6 @@ Processing Summary:
 - Text extraction: {len(summary['text_pages'])} pages ($0.00)
 - AI processing: {len(summary['form_pages'])} pages (${cost:.4f})
 - Empty pages: {len(summary['empty_pages'])}
-
-Cost Savings:
-- Full AI cost: ${summary['full_ai_cost']:.4f}
-- Hybrid cost: ${cost:.4f}
-- Saved: ${summary['full_ai_cost'] - cost:.4f} ({summary['savings_percentage']:.1f}%)
 {'='*80}
 """
         return header
