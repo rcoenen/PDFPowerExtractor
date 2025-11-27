@@ -176,6 +176,15 @@ class HybridPDFProcessor:
         self.last_cost = total_cost
         self.page_modes = page_modes
 
+        # Update summary costs with actual API-derived totals
+        ai_pages_count = len(summary.get("form_pages", [])) or 0
+        avg_cost_per_ai_page = (total_cost / ai_pages_count) if ai_pages_count else 0.0
+        summary["hybrid_cost"] = total_cost
+        summary["full_ai_cost"] = (avg_cost_per_ai_page * summary["total_pages"]) if avg_cost_per_ai_page else total_cost
+        savings = summary["full_ai_cost"] - summary["hybrid_cost"]
+        summary["savings"] = savings
+        summary["savings_percentage"] = (savings / summary["full_ai_cost"] * 100) if summary["full_ai_cost"] else 0.0
+
         # Merge results in order with explicit headers, stripping any internal page headers
         merged_content = []
         for page_num in sorted(results.keys()):
