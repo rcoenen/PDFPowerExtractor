@@ -219,27 +219,31 @@ class HybridPDFProcessor:
         if summary.get("force_ai_extraction"):
             mode_line = "Mode: Forced AI on all non-empty pages (hybrid bypassed)\n"
 
-        header = f"""PDF EXTRACTION RESULTS
-{'='*80}
-Source PDF: {os.path.basename(self.pdf_path)}
-Source PDF MD5: {self.calculate_md5()}
-Processing Date: {datetime.now().strftime("%Y-%m-%d %H:%M:%S")}
-Processing Time: {self.last_duration:.1f} seconds
-
-AI Model: {model}
-- Name: {model_info['name']}
-- Provider: {model_info['provider']}
-- Context: {model_info['context_window']}
-{mode_line if mode_line else ""}
-
-Processing Summary:
-- Total pages: {summary['total_pages']}
-- Text extraction: {len(summary['text_pages'])} pages ($0.00)
-- AI processing: {len(summary['form_pages'])} pages (${cost:.4f})
-- Empty pages: {len(summary['empty_pages'])}
-{'='*80}
-"""
-        return header
+        lines = [
+            "PDF EXTRACTION RESULTS",
+            "=" * 80,
+            f"Source PDF: {os.path.basename(self.pdf_path)}",
+            f"Source PDF MD5: {self.calculate_md5()}",
+            f"Processing Date: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}",
+            f"Processing Time: {self.last_duration:.1f} seconds",
+            "",
+            f"AI Model: {model}",
+            f"- Name: {model_info['name']}",
+            f"- Provider: {model_info['provider']}",
+            f"- Context: {model_info['context_window']}",
+        ]
+        if mode_line:
+            lines.append(mode_line)
+        lines.extend([
+            "",
+            "Processing Summary:",
+            f"- Total pages: {summary['total_pages']}",
+            f"- Text extraction: {len(summary['text_pages'])} pages ($0.00)",
+            f"- AI processing: {len(summary['form_pages'])} pages (${cost:.4f})",
+            f"- Empty pages: {len(summary['empty_pages'])}",
+            "=" * 80,
+        ])
+        return "\n".join(lines) + "\n"
     
     def save_results(self, content: str, output_file: str):
         """Save extraction results to file"""
