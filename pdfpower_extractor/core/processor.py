@@ -241,6 +241,7 @@ class HybridPDFProcessor:
             f"- Text extraction: {len(summary['text_pages'])} pages ($0.00)",
             f"- AI processing: {len(summary['form_pages'])} pages (${cost:.4f})",
             f"- Empty pages: {len(summary['empty_pages'])}",
+            f"- Total AI cost (actual): ${cost:.4f}",
             "=" * 80,
         ])
         return "\n".join(lines) + "\n"
