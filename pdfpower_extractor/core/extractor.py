@@ -116,8 +116,11 @@ IMPORTANT: Text fields get their values on the same line, but radio/checkbox gro
             
             # Calculate approximate cost
             from ..models.config import MODEL_CONFIGS, DEFAULT_MODEL
-            model_config = MODEL_CONFIGS.get(model, MODEL_CONFIGS[DEFAULT_MODEL])
-            cost = model_config['cost_per_page']
+            usage = result.get("usage") or {}
+            cost = usage.get("cost")
+            if cost is None:
+                model_config = MODEL_CONFIGS.get(model, MODEL_CONFIGS[DEFAULT_MODEL])
+                cost = model_config['cost_per_page']
             
             return {
                 'content': f"""
@@ -224,8 +227,11 @@ IMPORTANT: Text fields get their values on the same line, but radio/checkbox gro
 
             # Calculate approximate cost
             from ..models.config import MODEL_CONFIGS, DEFAULT_MODEL
-            model_config = MODEL_CONFIGS.get(model, MODEL_CONFIGS[DEFAULT_MODEL])
-            total_cost = model_config['cost_per_page'] * len(pages)
+            usage = result.get("usage") or {}
+            total_cost = usage.get("cost")
+            if total_cost is None:
+                model_config = MODEL_CONFIGS.get(model, MODEL_CONFIGS[DEFAULT_MODEL])
+                total_cost = model_config['cost_per_page'] * len(pages)
 
             return content_by_page, total_cost
 
