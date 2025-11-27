@@ -64,6 +64,7 @@ class HybridPDFProcessor:
         model: str = "google/gemini-2.5-flash",
         progress_callback: Optional[Callable[[Any], None]] = None,
         force_ai_extraction: bool = False,
+        batch_size: int = 5,
     ) -> str:
         """Process the PDF using hybrid approach"""
 
@@ -132,9 +133,8 @@ class HybridPDFProcessor:
             emit("done", page_num, "text_extraction")
 
         # Process form pages with AI
-        batch_size = 5
         form_pages = summary['form_pages']
-        for i in range(0, len(form_pages), batch_size):
+        for i in range(0, len(form_pages), max(1, batch_size)):
             batch = form_pages[i:i + batch_size]
             # mark batch start
             for page_num in batch:
