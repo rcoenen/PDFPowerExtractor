@@ -237,7 +237,7 @@ class AIExtractor:
             if mc.model_id == "gemini_flash":
                 from ..models.config import get_gemini_model_with_region
                 model_id = get_gemini_model_with_region()
-                if self.verbose:
+                if self.config and self.config.verbose:
                     region = model_id.split("@")[-1]
                     print(f"    Using Gemini region: {region}")
 
@@ -355,23 +355,26 @@ class AIExtractor:
             output_tokens = usage_data.get("completion_tokens", 0)
             total_tokens = usage_data.get("total_tokens", input_tokens + output_tokens)
 
-            # Use Requesty's actual reported cost (accounts for caching!)
+            # Use API's reported cost directly (Requesty, Nebius, Scaleway all report this)
             api_cost = usage_data.get("cost", 0.0)
 
-            # Calculate cost breakdown for reporting (estimated, ignores caching)
-            if mc:
+            # Model info for reporting
+            model_id = mc.model_id if mc else "unknown"
+            endpoint = mc.endpoint_id if mc else "unknown"
+
+            # Only calculate cost ourselves if API didn't provide it
+            if api_cost:
+                actual_cost = api_cost
+                input_cost = 0.0  # Not needed - using actual
+                output_cost = 0.0
+            elif mc:
                 input_cost = (input_tokens / 1_000_000) * mc.pricing.input_cost_per_1m
                 output_cost = (output_tokens / 1_000_000) * mc.pricing.output_cost_per_1m
-                model_id = mc.model_id
-                endpoint = mc.endpoint_id
+                actual_cost = input_cost + output_cost
             else:
                 input_cost = 0.0
                 output_cost = 0.0
-                model_id = "unknown"
-                endpoint = "unknown"
-
-            # Use actual API cost if available, otherwise use calculated
-            actual_cost = api_cost if api_cost else (input_cost + output_cost)
+                actual_cost = 0.0
 
             token_usage = TokenUsage(
                 input_tokens=input_tokens,

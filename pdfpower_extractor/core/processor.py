@@ -14,6 +14,7 @@ import hashlib
 import time
 from datetime import datetime
 from typing import List, Dict, Optional, Callable, Any
+from concurrent.futures import ThreadPoolExecutor, as_completed
 import glob
 import json
 
@@ -214,16 +215,34 @@ class HybridPDFProcessor:
             processed += 1
             emit("done", page_num, "text_extraction")
 
-        # Process form pages with AI (one page at a time for reliability)
+        # Process form pages with AI
+        # Use parallel processing with 5 workers (matches Gemini EU region pool)
         form_pages = summary['form_pages']
-        for idx, page_num in enumerate(form_pages):
-            emit("start", page_num, "ai_extraction")
+        max_workers = 5  # Match number of Gemini EU regions for optimal distribution
 
-            # Add delay between API calls to avoid rate limiting (except first page)
-            if idx > 0:
-                time.sleep(0.5)
-
+        def process_single_page(page_num: int) -> tuple:
+            """Process a single page - runs in thread pool"""
             result = self.ai_extractor.extract_page(self.pdf_path, page_num)
+            return page_num, result
+
+        if self.config.verbose:
+            print(f"[INFO] Processing {len(form_pages)} pages with {max_workers} parallel workers")
+
+        # Process pages in parallel, but collect results to process in order
+        page_results = {}
+        with ThreadPoolExecutor(max_workers=max_workers) as executor:
+            # Submit all pages
+            futures = {executor.submit(process_single_page, pn): pn for pn in form_pages}
+
+            # Collect results as they complete
+            for future in as_completed(futures):
+                page_num, result = future.result()
+                page_results[page_num] = result
+                emit("done", page_num, "ai_extraction")
+
+        # Now process results in page order (sorted) for consistent output
+        for page_num in sorted(page_results.keys()):
+            result = page_results[page_num]
 
             # Track token usage
             page_usage = result.get('token_usage', TokenUsage())
@@ -263,7 +282,6 @@ class HybridPDFProcessor:
 
             total_cost += page_usage.cost
             processed += 1
-            emit("done", page_num, "ai_extraction")
         
         # Skip empty pages
         for page_num in summary['empty_pages']:
