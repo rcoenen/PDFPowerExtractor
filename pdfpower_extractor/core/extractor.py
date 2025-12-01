@@ -396,10 +396,11 @@ class AIExtractor:
             }
 
     def _make_request_with_retry(self, api_url: str, headers: Dict, data: Dict, cfg: LLMConfig) -> Dict:
-        """Make API request with retry logic"""
+        """Make API request with retry logic for rate limiting and resource exhaustion"""
         last_error = None
+        max_retries = cfg.max_retries + 2  # Extra retries for rate limiting
 
-        for attempt in range(cfg.max_retries + 1):
+        for attempt in range(max_retries + 1):
             try:
                 response = requests.post(
                     api_url,
@@ -407,11 +408,50 @@ class AIExtractor:
                     json=data,
                     timeout=cfg.timeout_seconds
                 )
+
+                # Check for rate limiting / resource exhausted
+                if response.status_code in (429, 503, 529):
+                    error_text = response.text.lower()
+                    if attempt < max_retries:
+                        # Exponential backoff: 2s, 4s, 8s, 16s...
+                        wait_time = min(2 ** (attempt + 1), 30)
+                        if self.verbose:
+                            print(f"    ⏳ Rate limited (attempt {attempt + 1}), waiting {wait_time}s...")
+                        time.sleep(wait_time)
+                        continue
+                    else:
+                        response.raise_for_status()
+
+                # Check for resource exhausted in response body (Gemini specific)
+                if response.status_code == 200:
+                    result = response.json()
+                    # Check if response indicates resource exhaustion
+                    error_msg = str(result.get('error', {}).get('message', '')).lower()
+                    if 'resource' in error_msg and 'exhausted' in error_msg:
+                        if attempt < max_retries:
+                            wait_time = min(2 ** (attempt + 1), 30)
+                            if self.verbose:
+                                print(f"    ⏳ Resource exhausted (attempt {attempt + 1}), waiting {wait_time}s...")
+                            time.sleep(wait_time)
+                            continue
+                    return result
+
                 response.raise_for_status()
                 return response.json()
 
             except requests.exceptions.RequestException as e:
                 last_error = e
+                error_str = str(e).lower()
+
+                # Check for rate limiting in error message
+                if 'resource' in error_str or 'exhausted' in error_str or '429' in error_str:
+                    if attempt < max_retries:
+                        wait_time = min(2 ** (attempt + 1), 30)
+                        if self.verbose:
+                            print(f"    ⏳ API error (attempt {attempt + 1}), waiting {wait_time}s...")
+                        time.sleep(wait_time)
+                        continue
+
                 if attempt < cfg.max_retries:
                     time.sleep(cfg.retry_delay_seconds)
                     continue

@@ -216,8 +216,12 @@ class HybridPDFProcessor:
 
         # Process form pages with AI (one page at a time for reliability)
         form_pages = summary['form_pages']
-        for page_num in form_pages:
+        for idx, page_num in enumerate(form_pages):
             emit("start", page_num, "ai_extraction")
+
+            # Add delay between API calls to avoid rate limiting (except first page)
+            if idx > 0:
+                time.sleep(0.5)
 
             result = self.ai_extractor.extract_page(self.pdf_path, page_num)
 
