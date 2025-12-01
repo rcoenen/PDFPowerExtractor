@@ -1,5 +1,12 @@
 """
 Hybrid PDF Processor - Core processing engine
+
+Supports multiple extraction modes:
+- TEXT_ONLY: Pure PyMuPDF extraction with radio/checkbox detection (free, instant)
+- AI: Vision-based extraction using configured model (gemini, nano, etc.)
+
+Model and endpoint configuration is handled via ExtractionConfig.model_config_id
+which references configurations in models/config.py
 """
 
 import os
@@ -12,21 +19,66 @@ import json
 
 from .analyzer import PDFAnalyzer
 from .extractor import TextExtractor, AIExtractor
+from .config import ExtractionConfig, ExtractionMode, OutputFormat
+from .formatter import MarkdownFormatter, format_as_canonical_markdown
+from .validator import OutputValidator, ValidationResult
+from ..models.config import TokenUsage
 
 
 class HybridPDFProcessor:
-    """Main processor that routes pages based on content analysis"""
-    
-    def __init__(self, pdf_path: str, api_key: str):
+    """
+    Main processor that routes pages based on content analysis and configuration.
+
+    Usage:
+        # Text-only mode (no AI, free)
+        from pdfpower_extractor.core import text_only_config
+        processor = HybridPDFProcessor(pdf_path, config=text_only_config())
+        result = processor.process()
+
+        # AI mode with Gemini (US endpoint)
+        from pdfpower_extractor.core import gemini_flash_config
+        processor = HybridPDFProcessor(pdf_path, config=gemini_flash_config())
+        result = processor.process()
+
+        # AI mode with Gemini (EU endpoint)
+        from pdfpower_extractor.core import gemini_flash_eu_config
+        processor = HybridPDFProcessor(pdf_path, config=gemini_flash_eu_config())
+        result = processor.process()
+    """
+
+    def __init__(
+        self,
+        pdf_path: str,
+        config: Optional[ExtractionConfig] = None,
+        api_key: str = None  # Optional override, otherwise resolved from model config
+    ):
         self.pdf_path = pdf_path
-        self.api_key = api_key
+        self.config = config or ExtractionConfig()
+
+        # Get model config for AI modes
+        self.model_config = self.config.get_model_config()
+
         self.analyzer = PDFAnalyzer(pdf_path)
         self.text_extractor = TextExtractor()
-        self.ai_extractor = AIExtractor(api_key)
+        self.ai_extractor = AIExtractor(
+            api_key=api_key,
+            config=self.config,
+            model_config=self.model_config
+        )
+        self.validator = OutputValidator()
+        self.formatter = MarkdownFormatter(
+            use_unicode_symbols=(self.config.output_format == OutputFormat.PLAIN_TEXT)
+        )
+
         self.last_cost = 0.0
         self.last_duration = 0.0
         self._md5_hash = None
         self.page_modes: Dict[int, str] = {}
+        self.validation_results: Dict[int, ValidationResult] = {}
+
+        # Token usage tracking
+        self.total_token_usage: TokenUsage = TokenUsage()
+        self.page_token_usage: Dict[int, TokenUsage] = {}
     
     def calculate_md5(self) -> str:
         """Calculate MD5 hash of the PDF file"""
@@ -59,19 +111,49 @@ class HybridPDFProcessor:
                 continue
         return None
     
+    def _determine_extraction_mode(self, summary: Dict) -> ExtractionMode:
+        """
+        Return the configured extraction mode.
+        """
+        return self.config.mode
+
     def process(
         self,
-        model: str = "google/gemini-2.5-flash",
         progress_callback: Optional[Callable[[Any], None]] = None,
-        force_ai_extraction: bool = False,
-        batch_size: int = 5,
+        force_ai_extraction: bool = None,
     ) -> str:
-        """Process the PDF using hybrid approach"""
+        """
+        Process the PDF using hybrid approach.
 
+        Args:
+            progress_callback: Callback for progress updates
+            force_ai_extraction: Override force_ai setting from config
+
+        Returns:
+            Extracted text content
+        """
         start_time = time.time()
 
         # Analyze PDF structure
         summary = self.analyzer.analyze()
+
+        # Determine extraction mode
+        effective_mode = self._determine_extraction_mode(summary)
+
+        # Determine if we should force AI extraction
+        if force_ai_extraction is None:
+            force_ai_extraction = self.config.force_ai_extraction
+
+        # For TEXT_ONLY mode, never use AI
+        if effective_mode == ExtractionMode.TEXT_ONLY:
+            force_ai_extraction = False
+
+        if self.config.verbose:
+            print(f"[INFO] Extraction mode: {effective_mode.value}")
+            if self.model_config:
+                print(f"[INFO] Model: {self.model_config.name}")
+                print(f"[INFO] Endpoint: {self.model_config.get_endpoint().name}")
+            print(f"[INFO] Force AI: {force_ai_extraction}")
 
         # Optionally bypass hybrid mode and force AI on all non-empty pages
         if force_ai_extraction:
@@ -132,31 +214,52 @@ class HybridPDFProcessor:
             processed += 1
             emit("done", page_num, "text_extraction")
 
-        # Process form pages with AI
+        # Process form pages with AI (one page at a time for reliability)
         form_pages = summary['form_pages']
-        for i in range(0, len(form_pages), max(1, batch_size)):
-            batch = form_pages[i:i + batch_size]
-            # mark batch start
-            for page_num in batch:
-                emit("start", page_num, "ai_extraction")
+        for page_num in form_pages:
+            emit("start", page_num, "ai_extraction")
 
-            content_map, batch_cost = self.ai_extractor.extract_pages_batch(
-                self.pdf_path,
-                batch,
-                model=model
-            )
+            result = self.ai_extractor.extract_page(self.pdf_path, page_num)
 
-            for page_num in batch:
-                page_content = content_map.get(page_num) or f"\n=== Page {page_num} (Error) ===\nAI extraction failed: missing content\n"
+            # Track token usage
+            page_usage = result.get('token_usage', TokenUsage())
+            self.page_token_usage[page_num] = page_usage
+            self.total_token_usage = self.total_token_usage + page_usage
+
+            # Validate output if configured
+            if self.config.validation.validate_output:
+                validation = self.validator.validate(result['content'], page_num)
+                self.validation_results[page_num] = validation
+
+                if not validation.is_valid and self.config.validation.fallback_to_raw:
+                    # Fallback to text extraction on validation failure
+                    if self.config.verbose:
+                        print(f"[WARN] Page {page_num} validation failed, falling back to text extraction")
+                    fallback_content = self.text_extractor.extract_page(self.pdf_path, page_num)
+                    results[page_num] = {
+                        'content': fallback_content,
+                        'method': 'ai_extraction_fallback',
+                        'token_usage': page_usage,
+                    }
+                    page_modes[page_num] = "AI-FALLBACK-TO-TEXT"
+                else:
+                    results[page_num] = {
+                        'content': result['content'],
+                        'method': 'ai_extraction',
+                        'token_usage': page_usage,
+                    }
+                    page_modes[page_num] = "AI-VISION-EXTRACTION"
+            else:
                 results[page_num] = {
-                    'content': page_content,
+                    'content': result['content'],
                     'method': 'ai_extraction',
-                    'cost': batch_cost / len(batch) if batch else 0.0
+                    'token_usage': page_usage,
                 }
                 page_modes[page_num] = "AI-VISION-EXTRACTION"
-                processed += 1
-                emit("done", page_num, "ai_extraction")
-            total_cost += batch_cost
+
+            total_cost += page_usage.cost
+            processed += 1
+            emit("done", page_num, "ai_extraction")
         
         # Skip empty pages
         for page_num in summary['empty_pages']:
@@ -201,23 +304,60 @@ class HybridPDFProcessor:
             merged_content.append(f"{header}\n{cleaned}".rstrip() + "\n")
 
         # Create header
-        header = self._create_header(summary, model, total_cost)
+        effective_model = self.model_config.model_id if self.model_config else None
+        header = self._create_header(summary, effective_model, total_cost, effective_mode)
 
-        return header + '\n'.join(merged_content)
+        # Combine content
+        raw_output = header + '\n'.join(merged_content)
+
+        # Optionally convert to canonical markdown
+        if self.config.output_format == OutputFormat.CANONICAL_MARKDOWN:
+            # Just the content without header for markdown conversion
+            content_only = '\n'.join(merged_content)
+            markdown_content = format_as_canonical_markdown(
+                content_only,
+                use_unicode=False  # Use ASCII markers for markdown
+            )
+            return header + markdown_content
+
+        return raw_output
     
-    def _create_header(self, summary: Dict, model: str, cost: float) -> str:
+    def _create_header(
+        self,
+        summary: Dict,
+        model: str,
+        cost: float,
+        mode: ExtractionMode = None
+    ) -> str:
         """Create extraction result header"""
 
         from ..models.config import MODEL_CONFIGS
-        model_info = MODEL_CONFIGS.get(model, {
-            'name': model,
-            'provider': 'Via OpenRouter',
-            'context_window': 'Unknown'
-        })
+
+        # Handle TEXT_ONLY mode (no model used)
+        if mode == ExtractionMode.TEXT_ONLY or not model:
+            model_name = "Text Extraction (PyMuPDF)"
+            provider = "Local"
+            context_window = "N/A"
+            model_display = "None (Text Extraction)"
+        else:
+            mc = MODEL_CONFIGS.get(model)
+            if mc:
+                model_name = mc.name
+                endpoint = mc.get_endpoint()
+                provider = f"{endpoint.name} ({endpoint.region.value.upper()})"
+                context_window = mc.context_window
+                model_display = f"{mc.model_id} ({mc.model_id_at_endpoint})"
+            else:
+                model_name = model
+                provider = "Unknown"
+                context_window = "Unknown"
+                model_display = model
 
         mode_line = ""
         if summary.get("force_ai_extraction"):
             mode_line = "Mode: Forced AI on all non-empty pages (hybrid bypassed)\n"
+        elif mode:
+            mode_line = f"Mode: {mode.value.upper()}\n"
 
         lines = [
             "PDF EXTRACTION RESULTS",
@@ -227,25 +367,62 @@ class HybridPDFProcessor:
             f"Processing Date: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}",
             f"Processing Time: {self.last_duration:.1f} seconds",
             "",
-            f"AI Model: {model}",
-            f"- Name: {model_info['name']}",
-            f"- Provider: {model_info['provider']}",
-            f"- Context: {model_info['context_window']}",
+            f"AI Model: {model_display}",
+            f"- Name: {model_name}",
+            f"- Provider: {provider}",
+            f"- Context: {context_window}",
         ]
         if mode_line:
             lines.append(mode_line)
+        # Calculate estimated vs actual cost (caching savings)
+        estimated_cost = self.total_token_usage.input_cost + self.total_token_usage.output_cost
+        actual_cost = self.total_token_usage.cost
+        cache_savings = estimated_cost - actual_cost if estimated_cost > actual_cost else 0.0
+
         lines.extend([
             "",
             "Processing Summary:",
             f"- Total pages: {summary['total_pages']}",
             f"- Text extraction: {len(summary['text_pages'])} pages ($0.00)",
-            f"- AI processing: {len(summary['form_pages'])} pages (${cost:.4f})",
+            f"- AI processing: {len(summary['form_pages'])} pages",
             f"- Empty pages: {len(summary['empty_pages'])}",
-            f"- Total AI cost (actual): ${cost:.4f}",
-            "=" * 80,
+            "",
+            "Token Usage:",
+            f"- Input tokens: {self.total_token_usage.input_tokens:,}",
+            f"- Output tokens: {self.total_token_usage.output_tokens:,}",
+            f"- Total tokens: {self.total_token_usage.total_tokens:,}",
+            "",
+            "Cost (from Requesty API):",
+            f"- Actual cost: ${actual_cost:.6f}",
         ])
+        if cache_savings > 0:
+            lines.append(f"- Cache savings: ${cache_savings:.6f} ({cache_savings/estimated_cost*100:.0f}% saved)")
+        lines.append("=" * 80)
         return "\n".join(lines) + "\n"
-    
+
+    def get_token_usage_summary(self) -> Dict:
+        """Get detailed token usage summary"""
+        return {
+            'total': {
+                'input_tokens': self.total_token_usage.input_tokens,
+                'output_tokens': self.total_token_usage.output_tokens,
+                'total_tokens': self.total_token_usage.total_tokens,
+                'input_cost': self.total_token_usage.input_cost,
+                'output_cost': self.total_token_usage.output_cost,
+                'total_cost': self.total_token_usage.cost,
+            },
+            'per_page': {
+                page_num: {
+                    'input_tokens': usage.input_tokens,
+                    'output_tokens': usage.output_tokens,
+                    'cost': usage.cost,
+                }
+                for page_num, usage in self.page_token_usage.items()
+            },
+            'model': self.total_token_usage.model_id,
+            'endpoint': self.total_token_usage.endpoint,
+        }
+
     def save_results(self, content: str, output_file: str):
         """Save extraction results to file"""
         with open(output_file, 'w', encoding='utf-8') as f:

@@ -46,10 +46,18 @@ class PDFAnalyzer:
                 else:
                     text_pages.append(page_number)
         
-        # Calculate costs
+        # Calculate estimated costs based on token pricing
         model_config = MODEL_CONFIGS[DEFAULT_MODEL]
-        cost_per_page = model_config['cost_per_page']
-        
+        pricing = model_config.pricing
+
+        # Estimate cost per page: image tokens (input) + ~500 output tokens
+        est_input_tokens = pricing.image_tokens_estimate
+        est_output_tokens = 500  # typical output per page
+        cost_per_page = (
+            (est_input_tokens / 1_000_000) * pricing.input_cost_per_1m +
+            (est_output_tokens / 1_000_000) * pricing.output_cost_per_1m
+        )
+
         full_ai_cost = total_pages * cost_per_page
         hybrid_cost = len(form_pages) * cost_per_page
         savings = full_ai_cost - hybrid_cost
