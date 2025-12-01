@@ -205,7 +205,8 @@ class AIExtractor:
         page_num: int,
         model: str = None,
         model_config: Optional[AIModelConfig] = None,
-        llm_config: Optional[LLMConfig] = None
+        llm_config: Optional[LLMConfig] = None,
+        use_markdown: bool = False
     ) -> Dict:
         """
         Extract content from a page using AI vision.
@@ -216,6 +217,7 @@ class AIExtractor:
             model: Model identifier (legacy, use model_config instead)
             model_config: AI model configuration (overrides self.model_config)
             llm_config: Optional LLM config override
+            use_markdown: If True, use markdown-optimized prompts for structured output
         """
         # Resolve model config: param > instance > default
         mc = model_config or self.model_config
@@ -281,9 +283,9 @@ class AIExtractor:
                     "Content-Type": "application/json"
                 }
 
-            # Get model-specific prompts
-            system_prompt = get_system_prompt(model_id)
-            user_prompt = get_vision_prompt(model_id)
+            # Get model-specific prompts (use markdown prompts if requested)
+            system_prompt = get_system_prompt(model_id, use_markdown=use_markdown)
+            user_prompt = get_vision_prompt(model_id, use_markdown=use_markdown)
 
             # Build messages with system prompt
             messages = []
@@ -427,7 +429,7 @@ class AIExtractor:
                     if attempt < max_retries:
                         # Exponential backoff: 2s, 4s, 8s, 16s...
                         wait_time = min(2 ** (attempt + 1), 30)
-                        if self.verbose:
+                        if self.config and self.config.verbose:
                             print(f"    ⏳ Rate limited (attempt {attempt + 1}), waiting {wait_time}s...")
                         time.sleep(wait_time)
                         continue
@@ -443,7 +445,7 @@ class AIExtractor:
                         # This is a quota error, not rate limiting - don't retry forever
                         if attempt < 2:  # Only retry twice for quota errors
                             wait_time = 5
-                            if self.verbose:
+                            if self.config and self.config.verbose:
                                 print(f"    ⏳ Quota exhausted (attempt {attempt + 1}), waiting {wait_time}s...")
                             time.sleep(wait_time)
                             continue
@@ -468,7 +470,7 @@ class AIExtractor:
                 if 'resource' in error_str or 'exhausted' in error_str or '429' in error_str:
                     if attempt < max_retries:
                         wait_time = min(2 ** (attempt + 1), 30)
-                        if self.verbose:
+                        if self.config and self.config.verbose:
                             print(f"    ⏳ API error (attempt {attempt + 1}), waiting {wait_time}s...")
                         time.sleep(wait_time)
                         continue

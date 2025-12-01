@@ -26,6 +26,7 @@ You extract form data EXACTLY as it appears. Nothing more, nothing less."""
 # VISION EXTRACTION PROMPTS (for image-based extraction)
 # =============================================================================
 
+# Plain text output (default) - uses Unicode symbols
 VISION_PROMPT_DEFAULT = """Extract all text from this form page.
 
 For TEXT FIELDS with filled-in values:
@@ -94,6 +95,66 @@ For RADIO BUTTONS and CHECKBOXES:
 - Use ☒ for checked and ☐ for unchecked checkboxes
 
 Output plain text only. No introductory phrases like "Here's the text". No markdown formatting (no ** or ##)."""
+
+
+# =============================================================================
+# MARKDOWN OUTPUT PROMPTS (direct structured markdown extraction)
+# =============================================================================
+
+VISION_PROMPT_MARKDOWN = """Extract form data from this page as structured Markdown.
+
+OUTPUT FORMAT:
+
+1. SECTION HEADERS (numbered sections like "2. Uw gegevens"):
+   ## 2. Section Title
+
+2. TEXT FIELDS (label with filled value):
+   ### Field Label
+   `filled value here`
+
+   If empty, use empty backticks: ``
+
+3. RADIO BUTTON GROUPS:
+   ### Question Text
+   - (x) selected option
+   - ( ) unselected option
+   - ( ) another option
+
+4. CHECKBOX GROUPS:
+   ### Checklist Title
+   - [x] checked item
+   - [ ] unchecked item
+
+5. ADDRESS FIELDS (multiple sub-fields):
+   ### Address Label
+   - Straat en huisnummer: `Street 123`
+   - Postcode en plaats: `1234AB City`
+   - Land: `Netherlands`
+
+RULES:
+- Use (x) for SELECTED radio buttons, ( ) for unselected
+- Use [x] for CHECKED checkboxes, [ ] for unchecked
+- Put field values in backticks: `value`
+- Empty fields get empty backticks: ``
+- Copy all text VERBATIM - do not translate or summarize
+- DATES: For date fields (Geboortedatum, datum, etc.), if you see 8 consecutive digits like DDMMYYYY, insert dashes: `DD-MM-YYYY`. Example: "11121996" becomes `11-12-1996`
+- Skip page numbers, headers like "Immigratie- en Naturalisatiedienst"
+- Focus on form FIELDS and their VALUES
+
+Output ONLY the markdown. No explanations or commentary."""
+
+
+SYSTEM_PROMPT_MARKDOWN = """You are a STRICT FORM DATA EXTRACTOR outputting structured Markdown.
+
+ABSOLUTE RULES:
+1. DO NOT GUESS or invent values - EVER
+2. DO NOT HALLUCINATE information not present in the image
+3. DO NOT add or omit form fields
+4. Copy all labels and options VERBATIM
+5. If a field is empty, output empty backticks: ``
+6. If no radio/checkbox is selected, mark ALL options as unselected
+
+You extract form data EXACTLY as it appears, formatted as Markdown."""
 
 
 # =============================================================================
@@ -191,8 +252,16 @@ value: `{value}`
 # PROMPT SELECTION
 # =============================================================================
 
-def get_vision_prompt(model: str) -> str:
-    """Get the appropriate vision extraction prompt for a model"""
+def get_vision_prompt(model: str, use_markdown: bool = False) -> str:
+    """Get the appropriate vision extraction prompt for a model
+
+    Args:
+        model: Model identifier string
+        use_markdown: If True, return markdown-optimized prompt
+    """
+    if use_markdown:
+        return VISION_PROMPT_MARKDOWN
+
     model_lower = model.lower()
     if "gpt-4.1-nano" in model or "nano" in model_lower:
         return VISION_PROMPT_GPT_NANO
@@ -206,6 +275,13 @@ def get_text_to_markdown_prompt(input_text: str) -> str:
     return TEXT_TO_MARKDOWN_PROMPT.format(input_text=input_text)
 
 
-def get_system_prompt(model: str) -> str:
-    """Get the system prompt for a model"""
+def get_system_prompt(model: str, use_markdown: bool = False) -> str:
+    """Get the system prompt for a model
+
+    Args:
+        model: Model identifier string
+        use_markdown: If True, return markdown-optimized system prompt
+    """
+    if use_markdown:
+        return SYSTEM_PROMPT_MARKDOWN
     return SYSTEM_PROMPT_STRICT
