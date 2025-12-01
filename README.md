@@ -65,8 +65,10 @@ pip install -e .
 ## 🚀 Quick Start
 
 ```bash
-# Set your OpenRouter API key
-export OPENROUTER_API_KEY="your-key-here"
+# Set your API key (choose one provider)
+export REQUESTY_API_KEY="your-key"      # For Gemini Flash (EU)
+export SCW_SECRET_KEY="your-key"        # For Mistral Small (EU)
+export NEBIUS_API_KEY="your-key"        # For Qwen VL 72B (EU)
 
 # Extract a PDF (command available globally after installation)
 pdfpower extract your-form.pdf
@@ -107,28 +109,29 @@ Average cost per 10-page document: **~$0.0014** (less than 0.2 cents)
 | 32    | $0.0072        | $0.0045          |
 | 100   | $0.0225        | $0.0144          |
 
-## 🧪 Tested Models (August 2025)
+## 🧪 Tested Models (November 2025)
 
-### ✅ Models with 100% Accuracy
+### ✅ Models with 100% Accuracy (EU/GDPR Compliant)
 
-| Model | Provider | Cost/M tokens (OpenRouter) | Context | Notes |
-|-------|----------|---------------------------|---------|-------|
-| **google/gemini-2.5-flash** | Google | $0.075/$0.30 | 1M+ | **RECOMMENDED** - Best value |
-| anthropic/claude-3-haiku | Anthropic | $0.25/$1.25 | 200K | Reliable backup |
+| Model | Provider | Speed | Input /1M | Output /1M | Notes |
+|-------|----------|-------|-----------|------------|-------|
+| **Mistral Small 3.1 24B** | Scaleway (Paris) | 4.1s ⚡ | €0.15 | €0.35 | **FASTEST** |
+| Gemini 2.5 Flash Lite | Requesty → Vertex EU | 4.8s | $0.10 | $0.40 | Best value |
+| Qwen 2.5 VL 72B | Nebius (Netherlands) | 12.3s | $0.13 | $0.40 | Most thorough |
 
-*Note: Costs shown are OpenRouter pricing (August 2025). Direct API access may offer lower rates.*
+All models are **100% GDPR compliant** - data processed exclusively in EU data centers.
 
 ### ❌ Models That Failed
 
-| Model | Issue | Why It Matters |
-|-------|-------|----------------|
-| google/gemini-flash-1.5-8b | 50% checkbox accuracy | Version 1.5 insufficient |
-| google/gemini-2.5-flash-lite | 50% checkbox accuracy | "Lite" variant insufficient |
-| mistral/mistral-small-3.2 | 0% checkbox detection | Cannot see checkbox states |
-| openai/gpt-4o-mini | 0% overall accuracy | Complete failure |
-| mistral/pixtral-12b | Context too small | 32K < 37K needed per page |
+| Model | Provider | Issue |
+|-------|----------|-------|
+| Pixtral 12B | Scaleway EU | No radio button symbol output |
+| Gemma 3 27B | Nebius/Scaleway EU | OCR errors (Z→2 substitution) |
+| GPT-4.1 Nano | Azure Sweden | ~90% radio button accuracy |
+| google/gemini-flash-1.5-8b | OpenRouter | 50% checkbox accuracy |
+| openai/gpt-4o-mini | OpenRouter | Complete extraction failure |
 
-**Critical**: Checkbox detection is the key differentiator. Most models fail here.
+**Critical**: Radio button and checkbox detection is the key differentiator. Most models fail here.
 
 ## 📋 Technical Requirements
 
@@ -186,7 +189,10 @@ PDFPowerExtractor/
 ## 🔑 Requirements
 
 - Python 3.8+
-- OpenRouter API key
+- API key for one of the EU providers:
+  - `REQUESTY_API_KEY` - Gemini Flash via Requesty EU
+  - `SCW_SECRET_KEY` - Mistral Small via Scaleway (Paris)
+  - `NEBIUS_API_KEY` - Qwen VL 72B via Nebius (Netherlands)
 - Dependencies: PyMuPDF, pdf2image, Pillow, requests
 
 ## 📝 Example Output
