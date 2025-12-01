@@ -255,11 +255,12 @@ class AIModelConfig:
 
 MODEL_CONFIGS: Dict[str, AIModelConfig] = {
     # --- GEMINI 2.5 FLASH LITE via Requesty (EU / Vertex) ---
+    # Uses region pooling to avoid quota limits - see GEMINI_EU_REGIONS
     "gemini_flash": AIModelConfig(
         model_id="gemini_flash",
         name="Gemini 2.5 Flash Lite",
         endpoint_id="requesty_eu",
-        model_id_at_endpoint="vertex/gemini-2.5-flash-lite@europe-central2",
+        model_id_at_endpoint="vertex/gemini-2.5-flash-lite",  # Region added dynamically
         parameters=ModelParameters(temperature=0.1),
         pricing=TokenPricing(
             input_cost_per_1m=0.10,     # $0.10 per 1M input tokens
@@ -268,7 +269,7 @@ MODEL_CONFIGS: Dict[str, AIModelConfig] = {
         ),
         accuracy=100,
         context_window="1M tokens",
-        notes="RECOMMENDED - 100% accuracy, GDPR compliant (EU via Vertex)"
+        notes="RECOMMENDED - 100% accuracy, GDPR compliant (EU via Vertex, region pooling)"
     ),
 
 
@@ -334,6 +335,30 @@ MODEL_CONFIGS: Dict[str, AIModelConfig] = {
 
 # Default model (all EU via Requesty for GDPR)
 DEFAULT_MODEL = "gemini_flash"
+
+# Gemini EU regions for quota pooling (all GDPR compliant)
+GEMINI_EU_REGIONS = [
+    "europe-central2",   # Warsaw, Poland
+    "europe-north1",     # Hamina, Finland
+    "europe-west1",      # St. Ghislain, Belgium
+    "europe-west4",      # Eemshaven, Netherlands
+    "europe-west8",      # Milan, Italy
+]
+
+# Track which region to use next (round-robin)
+_gemini_region_index = 0
+
+def get_next_gemini_region() -> str:
+    """Get next Gemini EU region (round-robin for quota distribution)"""
+    global _gemini_region_index
+    region = GEMINI_EU_REGIONS[_gemini_region_index % len(GEMINI_EU_REGIONS)]
+    _gemini_region_index += 1
+    return region
+
+def get_gemini_model_with_region() -> str:
+    """Get Gemini model ID with next EU region"""
+    region = get_next_gemini_region()
+    return f"vertex/gemini-2.5-flash-lite@{region}"
 
 # Quick lookup by simple name
 MODEL_ALIASES = {

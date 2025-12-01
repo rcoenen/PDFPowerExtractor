@@ -232,6 +232,15 @@ class AIExtractor:
             endpoint = mc.get_endpoint()
             api_url = endpoint.get_chat_url()
             model_id = mc.model_id_at_endpoint
+
+            # Use region pooling for Gemini Flash to avoid quota limits
+            if mc.model_id == "gemini_flash":
+                from ..models.config import get_gemini_model_with_region
+                model_id = get_gemini_model_with_region()
+                if self.verbose:
+                    region = model_id.split("@")[-1]
+                    print(f"    Using Gemini region: {region}")
+
             api_key = os.environ.get(endpoint.api_key_env_var, self.api_key)
         else:
             # Legacy fallback: OpenRouter
@@ -425,16 +434,25 @@ class AIExtractor:
                 # Check for resource exhausted in response body (Gemini specific)
                 if response.status_code == 200:
                     result = response.json()
-                    # Check if response indicates resource exhaustion
+                    # Check if response indicates resource exhaustion (quota exceeded)
                     error_msg = str(result.get('error', {}).get('message', '')).lower()
                     if 'resource' in error_msg and 'exhausted' in error_msg:
-                        if attempt < max_retries:
-                            wait_time = min(2 ** (attempt + 1), 30)
+                        # This is a quota error, not rate limiting - don't retry forever
+                        if attempt < 2:  # Only retry twice for quota errors
+                            wait_time = 5
                             if self.verbose:
-                                print(f"    ⏳ Resource exhausted (attempt {attempt + 1}), waiting {wait_time}s...")
+                                print(f"    ⏳ Quota exhausted (attempt {attempt + 1}), waiting {wait_time}s...")
                             time.sleep(wait_time)
                             continue
+                        else:
+                            raise Exception(f"API quota exhausted: {result.get('error', {}).get('message', 'Unknown error')}")
                     return result
+
+                # Check for quota error in non-200 responses
+                if response.status_code in (400, 403):
+                    error_text = response.text.lower()
+                    if 'quota' in error_text or ('resource' in error_text and 'exhausted' in error_text):
+                        raise Exception(f"API quota exhausted (HTTP {response.status_code}): {response.text[:200]}")
 
                 response.raise_for_status()
                 return response.json()
