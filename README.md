@@ -125,6 +125,7 @@ All models are **100% GDPR compliant** - data processed exclusively in EU data c
 
 | Model | Provider | Issue |
 |-------|----------|-------|
+| Nemotron Nano V2 VL 12B | Nebius EU | Severe hallucination - invents fake fields, repeats content |
 | Pixtral 12B | Scaleway EU | No radio button symbol output |
 | Gemma 3 27B | Nebius/Scaleway EU | OCR errors (Z→2 substitution) |
 | GPT-4.1 Nano | Azure Sweden | ~90% radio button accuracy |
@@ -132,6 +133,17 @@ All models are **100% GDPR compliant** - data processed exclusively in EU data c
 | openai/gpt-4o-mini | OpenRouter | Complete extraction failure |
 
 **Critical**: Radio button and checkbox detection is the key differentiator. Most models fail here.
+
+### ⚠️ Nemotron VL Detailed Notes
+
+We tested **Nemotron Nano V2 VL 12B** via Nebius EU ($0.07/$0.20 per 1M tokens - 43% cheaper than Gemini). Despite the cost advantage:
+
+- **Hallucination**: Model invents fake numbered questions (e.g., generates 4.85, 4.86... 4.92 when only 4.8 exists)
+- **Repetition loops**: Repeats same question until hitting token limit (4000 tokens)
+- **Poor radio detection**: Outputs options as plain text without `(x)`/`( )` selection markers
+- **Output bloat**: Produces 2x the output of Gemini (48K vs 26K chars) due to fabricated content
+
+Despite extensive prompt engineering (anti-hallucination rules, `/no_think` control token, simplified prompts), the model cannot reliably extract form data. **Not recommended for production use.**
 
 ## 📋 Technical Requirements
 

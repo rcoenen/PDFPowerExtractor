@@ -101,6 +101,29 @@ Output plain text only. No introductory phrases like "Here's the text". No markd
 # MARKDOWN OUTPUT PROMPTS (direct structured markdown extraction)
 # =============================================================================
 
+# Nemotron-specific prompt - simpler to prevent hallucination
+VISION_PROMPT_NEMOTRON = """OCR this single page. Extract ONLY what you see.
+
+STOP RULES - CRITICAL:
+- STOP after extracting visible content
+- NEVER generate numbered lists (1. 2. 3. etc) unless they exist on the page
+- NEVER create fake section headers
+- NEVER repeat yourself
+- If the page has paragraphs of text, just output the text as-is
+
+FORMAT for FORM FIELDS only:
+- Section header: ## 2. Section Title
+- Text field: ### 1.5 Label followed by `value`
+- Radio buttons: - (x) selected or - ( ) unselected
+- Checkboxes: - [x] checked or - [ ] unchecked
+- Dates with 8 digits: format as `DD-MM-YYYY`
+
+For TEXT-HEAVY pages (legal info, instructions):
+Just output the paragraphs as plain text. Do not add markdown headers.
+
+Output the visible content now and STOP:"""
+
+
 VISION_PROMPT_MARKDOWN = """Extract form data from this page as structured Markdown.
 
 OUTPUT FORMAT:
@@ -259,10 +282,15 @@ def get_vision_prompt(model: str, use_markdown: bool = False) -> str:
         model: Model identifier string
         use_markdown: If True, return markdown-optimized prompt
     """
+    model_lower = model.lower()
+
+    # Nemotron needs a simpler prompt to prevent hallucination
+    if "nemotron" in model_lower:
+        return VISION_PROMPT_NEMOTRON
+
     if use_markdown:
         return VISION_PROMPT_MARKDOWN
 
-    model_lower = model.lower()
     if "gpt-4.1-nano" in model or "nano" in model_lower:
         return VISION_PROMPT_GPT_NANO
     if "gemma" in model_lower:
@@ -282,6 +310,11 @@ def get_system_prompt(model: str, use_markdown: bool = False) -> str:
         model: Model identifier string
         use_markdown: If True, return markdown-optimized system prompt
     """
-    if use_markdown:
-        return SYSTEM_PROMPT_MARKDOWN
-    return SYSTEM_PROMPT_STRICT
+    base_prompt = SYSTEM_PROMPT_MARKDOWN if use_markdown else SYSTEM_PROMPT_STRICT
+
+    # Nemotron models need /no_think to suppress reasoning chain output
+    model_lower = model.lower()
+    if "nemotron" in model_lower:
+        return "/no_think\n\n" + base_prompt
+
+    return base_prompt

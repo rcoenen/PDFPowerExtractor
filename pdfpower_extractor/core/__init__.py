@@ -8,10 +8,12 @@ from .config import (
     gemini_config,
     qwen_config,
     mistral_config,
+    nemotron_config,
     # Backwards compatibility
     gemini_flash_config,
     qwen_vl_config,
     mistral_small_config,
+    nemotron_vl_config,
 )
 from .prompts import (
     get_vision_prompt,
@@ -36,10 +38,12 @@ __all__ = [
     "gemini_config",
     "qwen_config",
     "mistral_config",
+    "nemotron_config",
     # Backwards compatibility
     "gemini_flash_config",
     "qwen_vl_config",
     "mistral_small_config",
+    "nemotron_vl_config",
     # Prompts
     "get_vision_prompt",
     "get_system_prompt",

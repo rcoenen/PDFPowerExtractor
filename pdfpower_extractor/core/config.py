@@ -122,7 +122,21 @@ def mistral_config() -> ExtractionConfig:
     return ExtractionConfig(model_config_id="mistral_small")
 
 
+def nemotron_config() -> ExtractionConfig:
+    """
+    Preset for Nemotron Nano V2 VL 12B via Nebius (EU).
+
+    Pricing: $0.07/1M input, $0.20/1M output tokens (CHEAPEST!)
+    Speed: TBD - needs benchmarking
+    GDPR: Compliant (EU - Netherlands/Finland)
+    Notes: NVIDIA's vision model optimized for OCR/document intelligence.
+           Leads on OCRBenchV2.
+    """
+    return ExtractionConfig(model_config_id="nemotron_vl")
+
+
 # Backwards compatibility aliases
 gemini_flash_config = gemini_config
 qwen_vl_config = qwen_config
 mistral_small_config = mistral_config
+nemotron_vl_config = nemotron_config

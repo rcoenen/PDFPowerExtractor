@@ -326,6 +326,24 @@ MODEL_CONFIGS: Dict[str, AIModelConfig] = {
         notes="FASTEST EU option. GDPR compliant (Paris). Uses SCW_SECRET_KEY."
     ),
 
+    # --- NEMOTRON NANO V2 VL 12B via Nebius (EU) ---
+    # NVIDIA's vision-language model optimized for document OCR
+    "nemotron_vl": AIModelConfig(
+        model_id="nemotron_vl",
+        name="Nemotron Nano V2 VL 12B (Nebius EU)",
+        endpoint_id="nebius_eu",
+        model_id_at_endpoint="nvidia/Nemotron-Nano-V2-12b",
+        parameters=ModelParameters(temperature=0.0, top_p=0.1),
+        pricing=TokenPricing(
+            input_cost_per_1m=0.07,     # $0.07 per 1M input tokens - CHEAPEST!
+            output_cost_per_1m=0.20,    # $0.20 per 1M output tokens
+            image_tokens_estimate=1000,  # Estimate - uses 512x512 tiles
+        ),
+        accuracy=0,  # TBD - needs benchmarking
+        context_window="128K tokens",
+        notes="CHEAPEST EU vision model. Optimized for OCR/document. GDPR compliant. Uses NEBIUS_API_KEY."
+    ),
+
 }
 
 
@@ -367,6 +385,8 @@ MODEL_ALIASES = {
     "nebius": "qwen_vl_72b",
     "mistral": "mistral_small",
     "scaleway": "mistral_small",
+    "nemotron": "nemotron_vl",
+    "nvidia": "nemotron_vl",
 }
 
 
