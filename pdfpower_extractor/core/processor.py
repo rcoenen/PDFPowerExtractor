@@ -192,7 +192,7 @@ class PDFProcessor:
                 body = body[1:]
             cleaned = "\n".join(body).strip()
 
-            header = f"## Page {page_num} of {total_pages}"
+            header = f"\n{'='*60}\n{'PAGE ' + str(page_num) + ' OF ' + str(total_pages):^60}\n{'='*60}"
             merged_content.append(f"{header}\n{cleaned}".rstrip() + "\n")
 
         # Create header

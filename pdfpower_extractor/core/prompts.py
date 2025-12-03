@@ -161,7 +161,8 @@ RULES:
 - Empty fields get empty backticks: ``
 - Copy all text VERBATIM - do not translate or summarize
 - DATES: For date fields (Geboortedatum, datum, etc.), if you see 8 consecutive digits like DDMMYYYY, insert dashes: `DD-MM-YYYY`. Example: "11121996" becomes `11-12-1996`
-- Skip page numbers, headers like "Immigratie- en Naturalisatiedienst"
+- ALWAYS extract document identification headers at the very top of the page (e.g., "DOC IDENTITY...", "DOC ...", "FORM...") - output these FIRST as a level 2 header: ## DOC IDENTITY ...
+- Skip only repetitive footers and standard agency headers like "Immigratie- en Naturalisatiedienst"
 - Focus on form FIELDS and their VALUES
 
 Output ONLY the markdown. No explanations or commentary."""
