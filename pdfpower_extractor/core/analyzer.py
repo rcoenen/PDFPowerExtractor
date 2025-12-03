@@ -3,8 +3,58 @@ PDF Page Analyzer - Detects form fields vs pure text pages
 """
 
 import fitz  # PyMuPDF
-from typing import List, Dict
+from typing import List, Dict, Tuple
 from ..models.config import MODEL_CONFIGS, DEFAULT_MODEL
+
+
+def detect_page_images(doc: fitz.Document, page_num: int) -> str:
+    """
+    Detect images on a PDF page and determine their color mode.
+
+    Args:
+        doc: Open PyMuPDF document
+        page_num: 0-based page number
+
+    Returns:
+        HTML comment string like: <!-- PAGE IMAGES: 1 | IMAGE 1: COLOR -->
+        or <!-- PAGE IMAGES: 0 --> if no images
+    """
+    page = doc[page_num]
+    images = page.get_images(full=True)
+
+    if not images:
+        return "<!-- PAGE IMAGES: 0 -->"
+
+    image_descriptions = []
+    for idx, img in enumerate(images, 1):
+        xref = img[0]  # Image xref number
+
+        try:
+            # Extract image to analyze color mode
+            base_image = doc.extract_image(xref)
+            colorspace = base_image.get("colorspace", 0)
+
+            # Determine color mode based on colorspace
+            # colorspace: 1 = grayscale, 3 = RGB, 4 = CMYK
+            if colorspace == 1:
+                # Check if it's truly B&W or grayscale by looking at bpc (bits per component)
+                bpc = base_image.get("bpc", 8)
+                if bpc == 1:
+                    color_mode = "BLACK_WHITE"
+                else:
+                    color_mode = "GRAYSCALE"
+            elif colorspace in (3, 4):
+                color_mode = "COLOR"
+            else:
+                color_mode = "UNKNOWN"
+
+            image_descriptions.append(f"IMAGE {idx}: {color_mode}")
+        except Exception:
+            image_descriptions.append(f"IMAGE {idx}: UNKNOWN")
+
+    count = len(images)
+    descriptions = " | ".join(image_descriptions)
+    return f"<!-- PAGE IMAGES: {count} | {descriptions} -->"
 
 
 class PDFAnalyzer:

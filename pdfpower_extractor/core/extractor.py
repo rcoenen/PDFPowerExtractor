@@ -253,13 +253,12 @@ class AIExtractor:
         cfg = llm_config or self.config.llm
 
         try:
-            # Convert page to PNG
+            # Convert page to PNG (color preserved for Gemini to analyze)
             images = convert_from_path(
                 pdf_path,
                 first_page=page_num,
                 last_page=page_num,
-                dpi=150,
-                grayscale=True
+                dpi=150
             )
 
             if not images:

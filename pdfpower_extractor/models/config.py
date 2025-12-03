@@ -1,7 +1,7 @@
 """
 AI Model Configuration System for PDFPowerExtractor
 
-Defines endpoints, API keys, model parameters, and regional settings.
+Uses Gemini 2.5 Flash Lite via Requesty EU for GDPR compliance.
 """
 
 from dataclasses import dataclass, field
@@ -35,20 +35,7 @@ class APIEndpoint:
 
 
 # Available endpoints
-# NOTE: OpenRouter has NO EU servers. Only Requesty provides EU-based routing.
 ENDPOINTS = {
-    "openrouter": APIEndpoint(
-        name="OpenRouter",
-        base_url="https://openrouter.ai/api/v1",
-        region=EndpointRegion.US,
-        api_key_env_var="OPENROUTER_API_KEY",
-        headers_template={
-            "Authorization": "Bearer {api_key}",
-            "Content-Type": "application/json",
-            "HTTP-Referer": "https://github.com/PDFPowerExtractor",
-        },
-        notes="Multi-provider gateway, US-only (no EU servers)"
-    ),
     "requesty_eu": APIEndpoint(
         name="Requesty EU",
         base_url="https://router.requesty.ai/v1",
@@ -58,58 +45,7 @@ ENDPOINTS = {
             "Authorization": "Bearer {api_key}",
             "Content-Type": "application/json",
         },
-        notes="EU-based endpoint for GDPR compliance - the ONLY EU option"
-    ),
-    "openai_direct": APIEndpoint(
-        name="OpenAI Direct",
-        base_url="https://api.openai.com/v1",
-        region=EndpointRegion.US,
-        api_key_env_var="OPENAI_API_KEY",
-        headers_template={
-            "Authorization": "Bearer {api_key}",
-            "Content-Type": "application/json",
-        },
-        notes="Direct OpenAI API (US-only)"
-    ),
-    "google_direct": APIEndpoint(
-        name="Google AI Direct",
-        base_url="https://generativelanguage.googleapis.com/v1beta",
-        region=EndpointRegion.US,
-        api_key_env_var="GOOGLE_API_KEY",
-        headers_template={
-            "Content-Type": "application/json",
-        },
-        notes="Direct Google AI API (US-only, different request format)"
-    ),
-    "nebius_eu": APIEndpoint(
-        name="Nebius Token Factory (EU)",
-        base_url="https://api.tokenfactory.nebius.com/v1",
-        region=EndpointRegion.EU,
-        api_key_env_var="NEBIUS_API_KEY",
-        headers_template={
-            "Authorization": "Bearer {api_key}",
-            "Content-Type": "application/json",
-        },
-        notes="EU-based (Netherlands/Finland/Paris) - GDPR, SOC2, ISO27001 compliant"
-    ),
-    "huggingface_nebius": APIEndpoint(
-        name="HuggingFace → Nebius (EU)",
-        base_url="huggingface://nebius",  # Special marker for HF client
-        region=EndpointRegion.EU,
-        api_key_env_var="HF_TOKEN",
-        headers_template={},  # Not used - HF client handles auth
-        notes="Routes through HuggingFace to Nebius EU. GDPR compliant."
-    ),
-    "scaleway_eu": APIEndpoint(
-        name="Scaleway (EU - Paris)",
-        base_url="https://api.scaleway.ai/v1",
-        region=EndpointRegion.EU,
-        api_key_env_var="SCW_SECRET_KEY",
-        headers_template={
-            "Authorization": "Bearer {api_key}",
-            "Content-Type": "application/json",
-        },
-        notes="EU-based (Paris, France) - GDPR compliant. Uses SCW_SECRET_KEY."
+        notes="EU-based endpoint for GDPR compliance"
     ),
 }
 
@@ -248,14 +184,10 @@ class AIModelConfig:
 
 
 # =============================================================================
-# AVAILABLE MODEL CONFIGURATIONS
+# GEMINI 2.5 FLASH LITE - THE ONLY MODEL WE USE
 # =============================================================================
-# All models route through Requesty EU for GDPR compliance.
-# Pricing is per 1M tokens - from Requesty dashboard.
 
 MODEL_CONFIGS: Dict[str, AIModelConfig] = {
-    # --- GEMINI 2.5 FLASH LITE via Requesty (EU / Vertex) ---
-    # Uses region pooling to avoid quota limits - see GEMINI_EU_REGIONS
     "gemini_flash": AIModelConfig(
         model_id="gemini_flash",
         name="Gemini 2.5 Flash Lite",
@@ -269,81 +201,8 @@ MODEL_CONFIGS: Dict[str, AIModelConfig] = {
         ),
         accuracy=100,
         context_window="1M tokens",
-        notes="RECOMMENDED - 100% accuracy, GDPR compliant (EU via Vertex, region pooling)"
+        notes="100% accuracy, GDPR compliant (EU via Vertex, region pooling)"
     ),
-
-
-    # --- QWEN 2.5 VL 72B via HuggingFace → Nebius (EU) ---
-    # Uses HF_TOKEN - good if you don't have a Nebius API key
-    "qwen_vl_72b_hf": AIModelConfig(
-        model_id="qwen_vl_72b_hf",
-        name="Qwen 2.5 VL 72B (via HF → Nebius EU)",
-        endpoint_id="huggingface_nebius",
-        model_id_at_endpoint="Qwen/Qwen2.5-VL-72B-Instruct",
-        parameters=ModelParameters(temperature=0.0, top_p=0.1),
-        pricing=TokenPricing(
-            input_cost_per_1m=0.13,     # $0.13 per 1M input tokens
-            output_cost_per_1m=0.40,    # $0.40 per 1M output tokens
-            image_tokens_estimate=2600,  # ~2600 tokens per page image (measured)
-        ),
-        accuracy=100,
-        context_window="32K tokens",
-        notes="GDPR compliant (EU). Routes via HuggingFace. Uses HF_TOKEN."
-    ),
-
-    # --- QWEN 2.5 VL 72B via Direct Nebius API (EU) ---
-    # Uses NEBIUS_API_KEY - direct connection, potentially faster
-    "qwen_vl_72b": AIModelConfig(
-        model_id="qwen_vl_72b",
-        name="Qwen 2.5 VL 72B (Nebius EU Direct)",
-        endpoint_id="nebius_eu",
-        model_id_at_endpoint="Qwen/Qwen2.5-VL-72B-Instruct",
-        parameters=ModelParameters(temperature=0.0, top_p=0.1),
-        pricing=TokenPricing(
-            input_cost_per_1m=0.13,     # $0.13 per 1M input tokens
-            output_cost_per_1m=0.40,    # $0.40 per 1M output tokens
-            image_tokens_estimate=2600,  # ~2600 tokens per page image (measured)
-        ),
-        accuracy=100,
-        context_window="32K tokens",
-        notes="GDPR compliant (EU - Netherlands/Finland). Direct API. Uses NEBIUS_API_KEY."
-    ),
-
-    # --- MISTRAL SMALL 3.1 24B via Scaleway (EU - Paris) ---
-    "mistral_small": AIModelConfig(
-        model_id="mistral_small",
-        name="Mistral Small 3.1 24B (Scaleway EU)",
-        endpoint_id="scaleway_eu",
-        model_id_at_endpoint="mistral-small-3.1-24b-instruct-2503",
-        parameters=ModelParameters(temperature=0.0, top_p=0.1),
-        pricing=TokenPricing(
-            input_cost_per_1m=0.15,     # €0.15 per 1M input tokens
-            output_cost_per_1m=0.35,    # €0.35 per 1M output tokens
-            image_tokens_estimate=2256,  # measured from test
-        ),
-        accuracy=100,
-        context_window="32K tokens",
-        notes="FASTEST EU option. GDPR compliant (Paris). Uses SCW_SECRET_KEY."
-    ),
-
-    # --- NEMOTRON NANO V2 VL 12B via Nebius (EU) ---
-    # NVIDIA's vision-language model optimized for document OCR
-    "nemotron_vl": AIModelConfig(
-        model_id="nemotron_vl",
-        name="Nemotron Nano V2 VL 12B (Nebius EU)",
-        endpoint_id="nebius_eu",
-        model_id_at_endpoint="nvidia/Nemotron-Nano-V2-12b",
-        parameters=ModelParameters(temperature=0.0, top_p=0.1),
-        pricing=TokenPricing(
-            input_cost_per_1m=0.07,     # $0.07 per 1M input tokens - CHEAPEST!
-            output_cost_per_1m=0.20,    # $0.20 per 1M output tokens
-            image_tokens_estimate=1000,  # Estimate - uses 512x512 tiles
-        ),
-        accuracy=0,  # TBD - needs benchmarking
-        context_window="128K tokens",
-        notes="CHEAPEST EU vision model. Optimized for OCR/document. GDPR compliant. Uses NEBIUS_API_KEY."
-    ),
-
 }
 
 
@@ -351,7 +210,6 @@ MODEL_CONFIGS: Dict[str, AIModelConfig] = {
 # DEFAULTS & HELPERS
 # =============================================================================
 
-# Default model (all EU via Requesty for GDPR)
 DEFAULT_MODEL = "gemini_flash"
 
 # Gemini EU regions for quota pooling (all GDPR compliant)
@@ -381,17 +239,14 @@ def get_gemini_model_with_region() -> str:
 # Quick lookup by simple name
 MODEL_ALIASES = {
     "gemini": "gemini_flash",
-    "qwen": "qwen_vl_72b",
-    "nebius": "qwen_vl_72b",
-    "mistral": "mistral_small",
-    "scaleway": "mistral_small",
-    "nemotron": "nemotron_vl",
-    "nvidia": "nemotron_vl",
 }
 
 
-def get_model_config(model_id: str) -> AIModelConfig:
-    """Get model config by ID or alias"""
+def get_model_config(model_id: str = None) -> AIModelConfig:
+    """Get model config by ID or alias (defaults to gemini_flash)"""
+    if model_id is None:
+        model_id = DEFAULT_MODEL
+
     # Check alias first
     if model_id in MODEL_ALIASES:
         model_id = MODEL_ALIASES[model_id]
@@ -403,73 +258,5 @@ def get_model_config(model_id: str) -> AIModelConfig:
 
 
 def list_models() -> Dict[str, AIModelConfig]:
-    """Get all available models (all EU/GDPR compliant)"""
+    """Get all available models"""
     return MODEL_CONFIGS.copy()
-
-
-# =============================================================================
-# FAILED MODELS (for reference, do not use)
-# =============================================================================
-
-FAILED_MODELS = {
-    "google/gemini-flash-1.5-8b": "50% checkbox accuracy",
-    "google/gemini-2.5-flash-lite": "50% checkbox accuracy",
-    "openai/gpt-4o-mini": "Complete extraction failure",
-    "mistral/mistral-small-3.2": "No checkbox detection",
-    "mistral/pixtral-12b": "Context window too small",
-}
-
-# =============================================================================
-# TESTED BUT REJECTED - US ONLY (no EU option available)
-# =============================================================================
-# These models were tested and work well, but are only available via US providers.
-# Cannot be used for GDPR-compliant EU processing.
-
-TESTED_US_ONLY = {
-    "Qwen/Qwen2.5-VL-7B-Instruct": {
-        "provider": "Hyperbolic (US)",
-        "performance": "Excellent - 3.22s, 35 input tokens, clean output",
-        "pricing": "$0.20/M input, $0.20/M output",
-        "reason_rejected": "US only - not available on any EU provider (Nebius, etc.)",
-        "notes": "Fastest and cheapest option tested, but no EU availability",
-    },
-    "meta-llama/Llama-3.2-11B-Vision-Instruct": {
-        "provider": "None available via HuggingFace",
-        "performance": "Not tested - no provider available",
-        "pricing": "N/A",
-        "reason_rejected": "Not available on any HuggingFace Inference Provider",
-        "notes": "Listed on HuggingFace but not deployed by any inference provider",
-    },
-}
-
-# =============================================================================
-# TESTED BUT REJECTED - ACCURACY ISSUES
-# =============================================================================
-# These models were tested and available in EU, but have accuracy problems.
-
-TESTED_ACCURACY_ISSUES = {
-    "google/gemma-3-27b-it": {
-        "provider": "Nebius (EU), Scaleway (EU)",
-        "performance": "Fast - 4.15s, 284 input tokens",
-        "pricing": "$0.10/M input, $0.30/M output (cheapest EU)",
-        "reason_rejected": "OCR accuracy issues - misreads Z as 2, adds unwanted markdown",
-        "tested_error": "K75-19Z-RZLT → K75-192-RZLT (Z→2 substitution)",
-        "notes": "Gemma is not optimized for OCR tasks. Even with explicit prompts warning about Z/2 confusion, it still makes errors. Not suitable for form data where 100% accuracy is required.",
-    },
-    "azure/gpt-4.1-nano": {
-        "provider": "Requesty EU → Azure Sweden",
-        "performance": "Fast - ~2s per page",
-        "pricing": "$0.10/M input, $0.40/M output",
-        "reason_rejected": "~90% accuracy - misses subtle radio button fill markers",
-        "tested_error": "Fails to detect filled radio buttons when fill marker is small or faint",
-        "notes": "GPT-4.1 Nano struggles with detecting small graphical elements like radio button fills. Not suitable for form data where 100% accuracy is required.",
-    },
-    "mistral/pixtral-12b-2409": {
-        "provider": "Scaleway (EU - Paris)",
-        "performance": "6.3s, 3064 input tokens, 408 output tokens",
-        "pricing": "€0.20/M input, €0.20/M output",
-        "reason_rejected": "Does not output radio button symbols (● ○) - outputs garbage dots instead",
-        "tested_error": "Radio button section filled with repeated '.' characters instead of proper symbols",
-        "notes": "Pixtral fails to follow instructions for radio button symbol output. Not suitable for form extraction.",
-    },
-}

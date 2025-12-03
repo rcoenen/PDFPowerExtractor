@@ -15,7 +15,8 @@ from datetime import datetime
 from typing import Dict, Optional, Callable, Any
 from concurrent.futures import ThreadPoolExecutor, as_completed
 
-from .analyzer import PDFAnalyzer
+from .analyzer import PDFAnalyzer, detect_page_images
+import fitz  # PyMuPDF
 from .extractor import AIExtractor
 from .config import ExtractionConfig
 from .validator import OutputValidator, ValidationResult
@@ -181,19 +182,23 @@ class PDFProcessor:
         self.last_duration = time.time() - start_time
         self.last_cost = total_cost
 
-        # Build markdown output
+        # Build markdown output with image detection
         merged_content = []
-        for page_num in sorted(results.keys()):
-            body = (results[page_num]['content'] or "").splitlines()
-            # Drop leading blanks and internal headers
-            while body and not body[0].strip():
-                body = body[1:]
-            while body and body[0].lstrip().startswith("==="):
-                body = body[1:]
-            cleaned = "\n".join(body).strip()
+        with fitz.open(self.pdf_path) as doc:
+            for page_num in sorted(results.keys()):
+                body = (results[page_num]['content'] or "").splitlines()
+                # Drop leading blanks and internal headers
+                while body and not body[0].strip():
+                    body = body[1:]
+                while body and body[0].lstrip().startswith("==="):
+                    body = body[1:]
+                cleaned = "\n".join(body).strip()
 
-            header = f"\n{'='*60}\n{'PAGE ' + str(page_num) + ' OF ' + str(total_pages):^60}\n{'='*60}"
-            merged_content.append(f"{header}\n{cleaned}".rstrip() + "\n")
+                # Detect images on this page using PyMuPDF
+                image_comment = detect_page_images(doc, page_num - 1)  # 0-based index
+
+                header = f"\n{'='*60}\n{'PAGE ' + str(page_num) + ' OF ' + str(total_pages):^60}\n{'='*60}"
+                merged_content.append(f"{header}\n{image_comment}\n{cleaned}".rstrip() + "\n")
 
         # Create header
         file_header = self._create_header(summary, total_cost)
