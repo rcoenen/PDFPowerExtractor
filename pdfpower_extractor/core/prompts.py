@@ -160,7 +160,10 @@ RULES:
 - Put field values in backticks: `value`
 - Empty fields get empty backticks: ``
 - Copy all text VERBATIM - do not translate or summarize
-- DATES: For date fields (Geboortedatum, datum, etc.), if you see 8 consecutive digits like DDMMYYYY, insert dashes: `DD-MM-YYYY`. Example: "11121996" becomes `11-12-1996`
+- DATES: For date fields (Geboortedatum, datum, Geldig van/tot, etc.):
+  - If you see individual digit boxes (like |1|0| |0|3| |2|0|2|1|), read EACH box separately and combine: Dag=`10`, Maand=`03`, Jaar=`2021`
+  - For 8 consecutive digits like DDMMYYYY, insert dashes: `DD-MM-YYYY`. Example: "11121996" becomes `11-12-1996`
+  - CRITICAL: A year like 2021 or 2031 has 4 digits, not 5. If you get "32021", re-read the boxes - it should be "2021"
 - ALWAYS extract document identification headers at the very top of the page (e.g., "DOC IDENTITY...", "DOC ...", "FORM...") - output these FIRST as a level 2 header: ## DOC IDENTITY ...
 - Skip only repetitive footers and standard agency headers like "Immigratie- en Naturalisatiedienst"
 - Focus on form FIELDS and their VALUES
