@@ -68,7 +68,7 @@ pip install -e .
 # Set your API key (choose one provider)
 export REQUESTY_API_KEY="your-key"      # For Gemini Flash (EU)
 export SCW_SECRET_KEY="your-key"        # For Mistral Small (EU)
-export NEBIUS_API_KEY="your-key"        # For Qwen VL 72B (EU)
+export NEBIUS_API_KEY="your-key"        # For Qwen VL 72B or Gemma 3 27B (EU)
 
 # Extract a PDF (command available globally after installation)
 pdfpower extract your-form.pdf
@@ -83,7 +83,7 @@ pdfpower models
 ## 📦 Using as a Library
 
 ```python
-from core.processor import HybridPDFProcessor
+from core.processor import PDFProcessor
 from core.analyzer import PDFAnalyzer
 
 # Analyze a PDF
@@ -92,7 +92,7 @@ summary = analyzer.analyze()
 print(f"Potential savings: {summary['savings_percentage']:.1f}%")
 
 # Process a PDF
-processor = HybridPDFProcessor("your-form.pdf", "your-openrouter-key")
+processor = PDFProcessor("your-form.pdf", "your-openrouter-key")
 result = processor.process(model="google/gemini-2.5-flash")
 processor.save_results(result, "output.txt")
 ```
@@ -204,7 +204,7 @@ PDFPowerExtractor/
 - API key for one of the EU providers:
   - `REQUESTY_API_KEY` - Gemini Flash via Requesty EU
   - `SCW_SECRET_KEY` - Mistral Small via Scaleway (Paris)
-  - `NEBIUS_API_KEY` - Qwen VL 72B via Nebius (Netherlands)
+  - `NEBIUS_API_KEY` - Qwen VL 72B or Gemma 3 27B via Nebius (Netherlands)
 - Dependencies: PyMuPDF, pdf2image, Pillow, requests
 
 ## 📝 Example Output
@@ -241,6 +241,11 @@ Processing Summary:
 ☐ 5-10 years
 ☐ 10+ years
 ```
+
+Hidden metadata:
+- Per-page TOC comments are included as HTML comments to aid navigation, e.g. `<!-- TOC PAGE_01: <summary> -->` (one per page, derived from that page's content).
+- A grouped TOC block is inserted right after the metadata header (before page content), wrapped in HTML comments (`<!-- TOC START --> ... <!-- TOC END -->`) so it remains hidden while keeping page-order summaries together.
+- If you need to add your own metadata, pass it as a multi-line string to `PDFProcessor.process(extra_metadata="...")`; it will be placed inside the single metadata comment under `EXTRA METADATA` (no nested `<!-- ... -->` blocks).
 
 ## 🤝 Contributing
 

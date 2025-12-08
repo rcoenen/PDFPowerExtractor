@@ -11,8 +11,9 @@ which references configurations in models/config.py
 import os
 import hashlib
 import time
+import re
 from datetime import datetime
-from typing import Dict, Optional, Callable, Any
+from typing import Dict, Optional, Callable, Any, List, Tuple
 from concurrent.futures import ThreadPoolExecutor, as_completed
 
 from .analyzer import PDFAnalyzer, detect_page_images
@@ -62,6 +63,11 @@ class PDFProcessor:
         self.last_duration = 0.0
         self._md5_hash = None
         self.validation_results: Dict[int, ValidationResult] = {}
+        self._compact_date_pattern = re.compile(
+            r"\b(?P<day>0[1-9]|[12][0-9]|3[01])"
+            r"(?P<month>0[1-9]|1[0-2])"
+            r"(?P<year>(19|20)\d{2})\b"
+        )
 
         # Token usage tracking
         self.total_token_usage: TokenUsage = TokenUsage()
@@ -82,17 +88,37 @@ class PDFProcessor:
     def process(
         self,
         progress_callback: Optional[Callable[[Any], None]] = None,
+        debug_save_images: bool = False,
+        extra_metadata: Optional[str] = None,
     ) -> str:
         """
         Process the PDF using AI vision extraction.
 
         Args:
             progress_callback: Callback for progress updates
+            debug_save_images: If True, save converted images to /tmp/powerpdf_extracted_images/
+            extra_metadata: Optional multi-line string to include inside the metadata comment
+                before the PDF extraction metadata (keeps a single well-formed comment block).
 
         Returns:
             Extracted content as Markdown
         """
         start_time = time.time()
+
+        # Create session directory for debug images if enabled
+        debug_session_dir = None
+        if debug_save_images:
+            import uuid
+            from pathlib import Path
+            timestamp = time.strftime("%Y%m%d_%H%M%S")
+            session_id = str(uuid.uuid4())[:8]
+            pdf_name = Path(self.pdf_path).stem
+            base_dir = Path("/tmp/powerpdf_extracted_images")
+            debug_session_dir = base_dir / f"session_{timestamp}_{session_id}_{pdf_name}"
+            debug_session_dir.mkdir(parents=True, exist_ok=True)
+
+            if self.config.verbose:
+                print(f"[DEBUG] Image saving enabled: {debug_session_dir}")
 
         # Analyze PDF structure
         summary = self.analyzer.analyze()
@@ -131,7 +157,13 @@ class PDFProcessor:
 
         def process_single_page(page_num: int) -> tuple:
             """Process a single page - runs in thread pool"""
-            result = self.ai_extractor.extract_page(self.pdf_path, page_num, use_markdown=True)
+            result = self.ai_extractor.extract_page(
+                self.pdf_path,
+                page_num,
+                use_markdown=True,
+                debug_save_images=debug_save_images,
+                debug_session_dir=debug_session_dir
+            )
             return page_num, result
 
         if self.config.verbose:
@@ -184,6 +216,7 @@ class PDFProcessor:
 
         # Build markdown output with image detection
         merged_content = []
+        toc_entries: List[Tuple[int, str]] = []
         with fitz.open(self.pdf_path) as doc:
             for page_num in sorted(results.keys()):
                 body = (results[page_num]['content'] or "").splitlines()
@@ -193,19 +226,58 @@ class PDFProcessor:
                 while body and body[0].lstrip().startswith("==="):
                     body = body[1:]
                 cleaned = "\n".join(body).strip()
+                page_summary = self._summarize_page(cleaned)
+                toc_entries.append((page_num, page_summary))
 
                 # Detect images on this page using PyMuPDF
                 image_comment = detect_page_images(doc, page_num - 1)  # 0-based index
 
                 header = f"\n{'='*60}\n{'PAGE ' + str(page_num) + ' OF ' + str(total_pages):^60}\n{'='*60}"
-                merged_content.append(f"{header}\n{image_comment}\n{cleaned}".rstrip() + "\n")
+                normalized = self._normalize_compact_dates(cleaned)
+                toc_comment = f"<!-- TOC PAGE_{page_num:02d}: {page_summary} -->"
+                merged_content.append(f"{toc_comment}\n{header}\n{image_comment}\n{normalized}".rstrip() + "\n")
 
         # Create header
-        file_header = self._create_header(summary, total_cost)
+        file_header = self._create_header(summary, total_cost, extra_metadata)
+        toc_block = self._build_top_level_toc(toc_entries)
 
-        return file_header + '\n'.join(merged_content)
+        final_output = file_header + toc_block + '\n'.join(merged_content)
+        if "<!-- TOC START -->" not in final_output:
+            raise ValueError("Grouped TOC block missing from output; header assembly failed.")
+        return final_output
 
-    def _create_header(self, summary: Dict, cost: float) -> str:
+    def _normalize_compact_dates(self, text: str) -> str:
+        """
+        Insert dashes into compact DDMMYYYY date strings to enforce dd-mm-yyyy format.
+        """
+        def _repl(match: re.Match) -> str:
+            return f"{match.group('day')}-{match.group('month')}-{match.group('year')}"
+
+        return self._compact_date_pattern.sub(_repl, text)
+
+    def _summarize_page(self, text: str) -> str:
+        """
+        Build a short one-line summary for a page from its extracted content.
+        """
+        if not text or not text.strip():
+            return "Empty page"
+
+        for raw_line in text.splitlines():
+            line = raw_line.strip()
+            if not line or line.startswith("<!--"):
+                continue
+            # Remove common markdown prefixes and bullets
+            line = line.lstrip("#").lstrip("*").lstrip("-").strip()
+            line = line.strip("*").strip()
+            if line.lower() in {"this page is empty", "page is empty"}:
+                return "Empty page"
+            if line:
+                summary = line[:120]
+                return summary
+
+        return "Empty page"
+
+    def _create_header(self, summary: Dict, cost: float, extra_metadata: Optional[str] = None) -> str:
         """Create extraction result header as hidden HTML comment"""
         from ..models.config import MODEL_CONFIGS
 
@@ -224,8 +296,13 @@ class PDFProcessor:
 
         actual_cost = self.total_token_usage.cost
 
-        lines = [
-            "<!--",
+        lines = ["<!--"]
+        if extra_metadata:
+            lines.append("EXTRA METADATA")
+            lines.extend(extra_metadata.strip().splitlines())
+            lines.append("")
+
+        lines.extend([
             "PDF EXTRACTION METADATA",
             f"Source PDF: {os.path.basename(self.pdf_path)}",
             f"MD5: {self.calculate_md5()}",
@@ -250,8 +327,18 @@ class PDFProcessor:
             f"- Total: ${actual_cost:.6f}",
             "-->",
             "",
-        ]
+        ])
 
+        return "\n".join(lines)
+
+    def _build_top_level_toc(self, toc_entries: List[Tuple[int, str]]) -> str:
+        """
+        Build a grouped, hidden TOC block placed after the metadata header.
+        """
+        lines = ["<!-- TOC START -->", "TABLE OF CONTENTS:"]
+        for page_num, summary in toc_entries:
+            lines.append(f"- Page {page_num}: {summary}")
+        lines.extend(["<!-- TOC END -->", ""])
         return "\n".join(lines)
 
     def get_token_usage_summary(self) -> Dict:
@@ -278,7 +365,3 @@ class PDFProcessor:
         """Save extraction results to file"""
         with open(output_file, 'w', encoding='utf-8') as f:
             f.write(content)
-
-
-# Backwards compatibility alias
-HybridPDFProcessor = PDFProcessor
