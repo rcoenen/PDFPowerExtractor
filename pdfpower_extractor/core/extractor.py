@@ -10,10 +10,42 @@ import fitz  # PyMuPDF
 from pdf2image import convert_from_path
 from io import BytesIO
 from typing import Dict, List, Tuple, Optional
+import tempfile
+import uuid
+from pathlib import Path
 
+import re
 from .config import ExtractionConfig, LLMConfig
 from .prompts import get_vision_prompt, get_system_prompt
 from ..models.config import AIModelConfig, get_model_config, ENDPOINTS, TokenUsage
+
+
+def normalize_radio_buttons(content: str) -> str:
+    """
+    Normalize radio button output to consistent (x)/( ) format.
+    Converts various formats like '◉ option (x)' or '◉ option' to '(x) option'.
+    """
+    lines = content.split('\n')
+    normalized = []
+
+    for line in lines:
+        # Pattern: ◉ option text (x) or ◉ option text -> (x) option text
+        if '◉' in line:
+            # Remove (x) if present after option text
+            line = re.sub(r'\s*\(x\)\s*$', '', line)
+            # Replace ◉ with (x)
+            line = line.replace('◉', '(x)')
+
+        # Pattern: ○ option text ( ) or ○ option text -> ( ) option text
+        if '○' in line:
+            # Remove ( ) if present after option text
+            line = re.sub(r'\s*\(\s*\)\s*$', '', line)
+            # Replace ○ with ( )
+            line = line.replace('○', '( )')
+
+        normalized.append(line)
+
+    return '\n'.join(normalized)
 
 # Optional HuggingFace support
 try:
@@ -206,7 +238,9 @@ class AIExtractor:
         model: str = None,
         model_config: Optional[AIModelConfig] = None,
         llm_config: Optional[LLMConfig] = None,
-        use_markdown: bool = False
+        use_markdown: bool = False,
+        debug_save_images: bool = False,
+        debug_session_dir: Optional[str] = None
     ) -> Dict:
         """
         Extract content from a page using AI vision.
@@ -218,6 +252,8 @@ class AIExtractor:
             model_config: AI model configuration (overrides self.model_config)
             llm_config: Optional LLM config override
             use_markdown: If True, use markdown-optimized prompts for structured output
+            debug_save_images: If True, save converted images to /tmp/powerpdf_extracted_images/
+            debug_session_dir: Optional session directory path (created by processor if None)
         """
         # Resolve model config: param > instance > default
         mc = model_config or self.model_config
@@ -258,11 +294,37 @@ class AIExtractor:
                 pdf_path,
                 first_page=page_num,
                 last_page=page_num,
-                dpi=150
+                dpi=300  # 300 DPI improves radio button detection accuracy
             )
 
             if not images:
                 raise Exception("Failed to convert page to image")
+
+            # Debug: Save image to /tmp/powerpdf_extracted_images/ if enabled
+            saved_image_path = None
+            if debug_save_images:
+                # Use provided session directory or create one
+                if debug_session_dir:
+                    session_dir = Path(debug_session_dir)
+                else:
+                    # Fallback: create session directory with timestamp
+                    session_id = str(uuid.uuid4())[:8]
+                    timestamp = time.strftime("%Y%m%d_%H%M%S")
+                    base_dir = Path("/tmp/powerpdf_extracted_images")
+                    session_dir = base_dir / f"session_{timestamp}_{session_id}"
+                    session_dir.mkdir(parents=True, exist_ok=True)
+
+                # Generate filename
+                pdf_name = Path(pdf_path).stem
+                image_filename = f"{pdf_name}_page{page_num:03d}.png"
+                image_path = session_dir / image_filename
+
+                # Save image
+                images[0].save(image_path, format='PNG')
+                saved_image_path = str(image_path)
+
+                if self.config and self.config.verbose:
+                    print(f"    💾 Debug: Saved image to {saved_image_path}")
 
             # Convert to base64
             img_buffer = BytesIO()
@@ -285,6 +347,39 @@ class AIExtractor:
             # Get model-specific prompts (use markdown prompts if requested)
             system_prompt = get_system_prompt(model_id, use_markdown=use_markdown)
             user_prompt = get_vision_prompt(model_id, use_markdown=use_markdown)
+
+            # Debug: Save prompts if debug_save_images is enabled
+            if debug_save_images and saved_image_path:
+                # Use the same session directory as the image
+                session_dir = Path(saved_image_path).parent
+                prompt_filename = f"{Path(pdf_path).stem}_page{page_num:03d}_prompts.txt"
+                prompt_path = session_dir / prompt_filename
+
+                # Determine prompt type (simplified vs strict)
+                prompt_type = "custom"
+                if "STRICT FORM DATA EXTRACTOR" in system_prompt:
+                    prompt_type = "strict"
+                elif "form data extractor" in system_prompt.lower():
+                    prompt_type = "simplified"
+
+                with open(prompt_path, 'w', encoding='utf-8') as f:
+                    f.write(f"=== PROMPT METADATA ===\n")
+                    f.write(f"Model: {model_id}\n")
+                    f.write(f"Prompt Type: {prompt_type}\n")
+                    f.write(f"Use Markdown: {use_markdown}\n")
+                    f.write(f"Page: {page_num}\n")
+                    f.write(f"Timestamp: {time.strftime('%Y-%m-%d %H:%M:%S')}\n")
+                    f.write(f"\n{'='*50}\n\n")
+                    f.write(f"=== SYSTEM PROMPT ===\n")
+                    f.write(f"\n{'='*50}\n\n")
+                    f.write(system_prompt)
+                    f.write(f"\n\n{'='*50}\n\n")
+                    f.write(f"=== USER PROMPT ===\n")
+                    f.write(f"\n{'='*50}\n\n")
+                    f.write(user_prompt)
+
+                if self.config and self.config.verbose:
+                    print(f"    📝 Debug: Saved {prompt_type} prompts to {prompt_path}")
 
             # Build messages with system prompt
             messages = []
@@ -350,13 +445,16 @@ class AIExtractor:
 
             content = result['choices'][0]['message']['content']
 
+            # Normalize radio button output (convert ◉/○ to (x)/( ))
+            content = normalize_radio_buttons(content)
+
             # Parse token usage from API response
             usage_data = result.get("usage") or {}
             input_tokens = usage_data.get("prompt_tokens", 0)
             output_tokens = usage_data.get("completion_tokens", 0)
             total_tokens = usage_data.get("total_tokens", input_tokens + output_tokens)
 
-            # Use API's reported cost directly (Requesty, Nebius, Scaleway all report this)
+            # Use API's reported cost directly (Requesty returns this, Nebius does not)
             api_cost = usage_data.get("cost", 0.0)
 
             # Model info for reporting
@@ -399,13 +497,15 @@ class AIExtractor:
 {content}
 """,
                 'token_usage': token_usage,
+                'debug_image_path': saved_image_path,
             }
 
         except Exception as e:
             return {
                 'content': f"\n=== Page {page_num} (Error) ===\nAI extraction failed: {str(e)}\n",
                 'token_usage': TokenUsage(),
-                'cost': 0.0
+                'cost': 0.0,
+                'debug_image_path': saved_image_path,
             }
 
     def _make_request_with_retry(self, api_url: str, headers: Dict, data: Dict, cfg: LLMConfig) -> Dict:
@@ -527,4 +627,3 @@ class AIExtractor:
                 "total_tokens": (usage.prompt_tokens + usage.completion_tokens) if usage else 0,
             }
         }
-

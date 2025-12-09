@@ -47,6 +47,17 @@ ENDPOINTS = {
         },
         notes="EU-based endpoint for GDPR compliance"
     ),
+    "nebius_eu": APIEndpoint(
+        name="Nebius EU",
+        base_url="https://api.tokenfactory.nebius.com/v1",
+        region=EndpointRegion.EU,
+        api_key_env_var="NEBIUS_API_KEY",
+        headers_template={
+            "Authorization": "Bearer {api_key}",
+            "Content-Type": "application/json",
+        },
+        notes="EU-based endpoint for GDPR compliance, supports Gemma 3 27B and Qwen VL 72B"
+    ),
 }
 
 
@@ -184,7 +195,7 @@ class AIModelConfig:
 
 
 # =============================================================================
-# GEMINI 2.5 FLASH LITE - THE ONLY MODEL WE USE
+# MODEL CONFIGURATIONS
 # =============================================================================
 
 MODEL_CONFIGS: Dict[str, AIModelConfig] = {
@@ -202,6 +213,44 @@ MODEL_CONFIGS: Dict[str, AIModelConfig] = {
         accuracy=100,
         context_window="1M tokens",
         notes="100% accuracy, GDPR compliant (EU via Vertex, region pooling)"
+    ),
+    "gemma_3_27b": AIModelConfig(
+        model_id="gemma_3_27b",
+        name="Google Gemma 3 27B",
+        endpoint_id="nebius_eu",
+        model_id_at_endpoint="google/gemma-3-27b-it",  # Model ID for Nebius API
+        parameters=ModelParameters(temperature=0.0),  # 0.0 for deterministic output
+        pricing=TokenPricing(
+            input_cost_per_1m=0.10,     # $0.10 per 1M input tokens (Nebius pricing)
+            output_cost_per_1m=0.30,    # $0.30 per 1M output tokens (Nebius pricing)
+            image_tokens_estimate=1000,  # ~1000 tokens per page image
+        ),
+        accuracy=85,  # Based on previous testing showing OCR errors
+        context_window="128K tokens",  # Gemma 3 27B context window
+        supports_vision=True,
+        supports_checkboxes=True,
+        supports_radio=True,
+        supports_text=True,
+        notes="Experimental: Previous testing showed OCR errors (Z→2 substitution). Use for testing only. GDPR compliant (EU via Nebius). Nebius pricing: $0.10/1M input, $0.30/1M output. Actual costs reported by API."
+    ),
+    "qwen_vl_72b": AIModelConfig(
+        model_id="qwen_vl_72b",
+        name="Qwen2.5 VL 72B Instruct",
+        endpoint_id="nebius_eu",
+        model_id_at_endpoint="Qwen/Qwen2.5-VL-72B-Instruct",  # Model ID for Nebius API
+        parameters=ModelParameters(temperature=0.1),
+        pricing=TokenPricing(
+            input_cost_per_1m=0.25,     # $0.25 per 1M input tokens (Nebius listed pricing)
+            output_cost_per_1m=0.75,    # $0.75 per 1M output tokens (Nebius listed pricing)
+            image_tokens_estimate=1500,  # ~1500 tokens per page image (VL models use more)
+        ),
+        accuracy=0,  # Unknown - needs testing
+        context_window="128K tokens",  # Qwen2.5 VL context window
+        supports_vision=True,
+        supports_checkboxes=True,
+        supports_radio=True,
+        supports_text=True,
+        notes="Powerful vision-language model from Alibaba. GDPR compliant (EU via Nebius). Nebius listed pricing: $0.25/1M input, $0.75/1M output (actual costs reported by API may differ). Needs prompt tuning and accuracy testing."
     ),
 }
 
@@ -239,6 +288,9 @@ def get_gemini_model_with_region() -> str:
 # Quick lookup by simple name
 MODEL_ALIASES = {
     "gemini": "gemini_flash",
+    "gemma": "gemma_3_27b",
+    "qwen": "qwen_vl_72b",
+    "qwen_vl": "qwen_vl_72b",
 }
 
 
