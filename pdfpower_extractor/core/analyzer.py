@@ -20,6 +20,9 @@ def detect_page_images(doc: fitz.Document, page_num: int) -> str:
         or <!-- PAGE IMAGES: 0 --> if no images
     """
     page = doc[page_num]
+    # get_images(full=True) returns tuples:
+    # (xref, smask, width, height, bpc, colorspace, alt_colorspace, name, filter, referencer)
+    # Index 4 = bpc (bits per component), Index 5 = colorspace
     images = page.get_images(full=True)
 
     if not images:
@@ -27,30 +30,26 @@ def detect_page_images(doc: fitz.Document, page_num: int) -> str:
 
     image_descriptions = []
     for idx, img in enumerate(images, 1):
-        xref = img[0]  # Image xref number
+        # Get colorspace and bpc directly from tuple - no image extraction needed!
+        bpc = img[4] if len(img) > 4 else 8
+        colorspace = img[5] if len(img) > 5 else ""
 
-        try:
-            # Extract image to analyze color mode
-            base_image = doc.extract_image(xref)
-            colorspace = base_image.get("colorspace", 0)
-
-            # Determine color mode based on colorspace
-            # colorspace: 1 = grayscale, 3 = RGB, 4 = CMYK
-            if colorspace == 1:
-                # Check if it's truly B&W or grayscale by looking at bpc (bits per component)
-                bpc = base_image.get("bpc", 8)
-                if bpc == 1:
-                    color_mode = "BLACK_WHITE"
-                else:
-                    color_mode = "GRAYSCALE"
-            elif colorspace in (3, 4):
-                color_mode = "COLOR"
+        # Determine color mode based on colorspace string
+        # PyMuPDF returns strings: "DeviceGray", "DeviceRGB", "DeviceCMYK", "ICCBased", etc.
+        cs_lower = str(colorspace).lower()
+        if "gray" in cs_lower:
+            # Check if it's truly B&W or grayscale by looking at bpc
+            if bpc == 1:
+                color_mode = "BLACK_WHITE"
             else:
-                color_mode = "UNKNOWN"
+                color_mode = "GRAYSCALE"
+        elif "rgb" in cs_lower or "cmyk" in cs_lower or "icc" in cs_lower:
+            # ICCBased is typically a color profile (RGB/CMYK with ICC profile)
+            color_mode = "COLOR"
+        else:
+            color_mode = "UNKNOWN"
 
-            image_descriptions.append(f"IMAGE {idx}: {color_mode}")
-        except Exception:
-            image_descriptions.append(f"IMAGE {idx}: UNKNOWN")
+        image_descriptions.append(f"IMAGE {idx}: {color_mode}")
 
     count = len(images)
     descriptions = " | ".join(image_descriptions)

@@ -194,14 +194,18 @@ class PDFProcessor:
             if self.config.verbose:
                 print(f"[INFO] Processing {len(pages_to_process)} pages with {max_workers} parallel workers")
 
+            extraction_start = time.time()
             # Process pages in parallel, tracking errors
             page_results = {}
             page_errors: Dict[int, PageError] = {}
 
+            page_timings = {}
             with ThreadPoolExecutor(max_workers=max_workers) as executor:
                 futures = {executor.submit(process_single_page, pn): pn for pn in pages_to_process}
                 for future in as_completed(futures):
                     page_num = futures[future]
+                    elapsed = time.time() - extraction_start
+                    page_timings[page_num] = elapsed
                     try:
                         _, result = future.result()
                         page_results[page_num] = result
@@ -219,6 +223,12 @@ class PDFProcessor:
                         if self.config.verbose:
                             print(f"[ERROR] Page {page_num} failed: {error_msg}")
                         emit("error", page_num)
+
+            print(f"[TIMING] Extraction took {time.time() - extraction_start:.2f}s")
+            # Show slowest pages
+            sorted_timings = sorted(page_timings.items(), key=lambda x: x[1], reverse=True)
+            slowest_5 = sorted_timings[:5]
+            print(f"[TIMING] Slowest pages: {[(p, f'{t:.1f}s') for p, t in slowest_5]}")
 
             # Collect results in page order
             for page_num in sorted(page_results.keys()):
@@ -288,6 +298,7 @@ class PDFProcessor:
                         }
 
             # Build markdown output with image detection
+            post_start = time.time()
             merged_content = []
             toc_entries: List[Tuple[int, str]] = []
             with fitz.open(self.pdf_path) as doc:
@@ -315,6 +326,8 @@ class PDFProcessor:
             toc_block = self._build_top_level_toc(toc_entries)
 
             final_output = file_header + toc_block + '\n'.join(merged_content)
+
+            print(f"[TIMING] Post-processing took {time.time() - post_start:.2f}s")
             if "<!-- TOC START -->" not in final_output:
                 raise ValueError("Grouped TOC block missing from output; header assembly failed.")
 
