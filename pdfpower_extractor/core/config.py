@@ -71,6 +71,11 @@ class ExtractionConfig:
     llm: LLMConfig = field(default_factory=LLMConfig)
     validation: ValidationConfig = field(default_factory=ValidationConfig)
 
+    # === Error Handling ===
+    # If True, stop processing on first page failure and raise ExtractionError
+    # If False, continue processing all pages and collect errors in BatchResult
+    fail_fast: bool = True
+
     # === Logging/Debug ===
     verbose: bool = False
     log_prompts: bool = False

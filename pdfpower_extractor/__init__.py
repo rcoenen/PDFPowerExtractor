@@ -6,13 +6,25 @@ __version__ = "2.0.0"
 __author__ = "Robert Coenen"
 __email__ = "rcoenen@github.com"
 
-from .core.processor import PDFProcessor, HybridPDFProcessor
+from .core.processor import PDFProcessor
 from .core.analyzer import PDFAnalyzer
 from .core.extractor import AIExtractor
+from .core.errors import (
+    ExtractionError,
+    BatchResult,
+    PageResult,
+    PageError,
+    ErrorType,
+)
 
 __all__ = [
     "PDFProcessor",
-    "HybridPDFProcessor",  # Backwards compatibility
     "PDFAnalyzer",
     "AIExtractor",
+    # Errors
+    "ExtractionError",
+    "BatchResult",
+    "PageResult",
+    "PageError",
+    "ErrorType",
 ]

@@ -294,7 +294,7 @@ class AIExtractor:
                 pdf_path,
                 first_page=page_num,
                 last_page=page_num,
-                dpi=300  # 300 DPI improves radio button detection accuracy
+                dpi=150  # 150 DPI balances speed vs accuracy (was 300)
             )
 
             if not images:
@@ -326,10 +326,53 @@ class AIExtractor:
                 if self.config and self.config.verbose:
                     print(f"    💾 Debug: Saved image to {saved_image_path}")
 
-            # Convert to base64
+            # Convert to base64 using endpoint's preferred format
             img_buffer = BytesIO()
-            images[0].save(img_buffer, format='PNG')
-            img_buffer.seek(0)
+            img_format = 'PNG'
+            img_mime = 'image/png'
+
+            if mc:
+                endpoint = mc.get_endpoint()
+                fmt = endpoint.image_format.lower()
+                quality = endpoint.image_quality
+
+                # Ensure RGB for lossy formats
+                img = images[0]
+                if fmt in ('jpeg', 'webp_lossy') and img.mode in ('RGBA', 'LA', 'P'):
+                    img = img.convert('RGB')
+
+                if fmt == 'webp_lossless':
+                    img.save(img_buffer, format='WEBP', lossless=True)
+                    img_mime = 'image/webp'
+                    img_format = 'WEBP'
+                elif fmt == 'webp_lossy':
+                    img.save(img_buffer, format='WEBP', quality=quality)
+                    img_mime = 'image/webp'
+                    img_format = 'WEBP'
+                elif fmt == 'jpeg':
+                    img.save(img_buffer, format='JPEG', quality=quality)
+                    img_mime = 'image/jpeg'
+                    img_format = 'JPEG'
+                else:  # png (default)
+                    images[0].save(img_buffer, format='PNG')
+
+                # Check payload limit and compress further if needed
+                if endpoint.max_payload_mb > 0:
+                    size_mb = len(img_buffer.getvalue()) / (1024 * 1024)
+                    if size_mb > endpoint.max_payload_mb * 0.8:
+                        img_buffer = BytesIO()
+                        img.save(img_buffer, format='WEBP', quality=min(quality, 85))
+                        img_mime = 'image/webp'
+                        img_format = 'WEBP'
+                        if self.config and self.config.verbose:
+                            new_size_mb = len(img_buffer.getvalue()) / (1024 * 1024)
+                            print(f"    📦 Compressed: {size_mb:.1f}MB → {new_size_mb:.1f}MB (limit: {endpoint.max_payload_mb}MB)")
+
+                img_buffer.seek(0)
+            else:
+                images[0].save(img_buffer, format='PNG')
+                img_buffer.seek(0)
+
             img_base64 = base64.b64encode(img_buffer.read()).decode('utf-8')
 
             # Prepare API request headers
@@ -395,7 +438,7 @@ class AIExtractor:
                     {
                         "type": "image_url",
                         "image_url": {
-                            "url": f"data:image/png;base64,{img_base64}"
+                            "url": f"data:{img_mime};base64,{img_base64}"
                         }
                     }
                 ]
@@ -501,12 +544,10 @@ class AIExtractor:
             }
 
         except Exception as e:
-            return {
-                'content': f"\n=== Page {page_num} (Error) ===\nAI extraction failed: {str(e)}\n",
-                'token_usage': TokenUsage(),
-                'cost': 0.0,
-                'debug_image_path': saved_image_path,
-            }
+            # Re-raise the exception so the processor can track it as a page error
+            # Previously this swallowed errors and returned them as content,
+            # which prevented proper batch error handling
+            raise RuntimeError(f"AI extraction failed: {str(e)}") from e
 
     def _make_request_with_retry(self, api_url: str, headers: Dict, data: Dict, cfg: LLMConfig) -> Dict:
         """Make API request with retry logic for rate limiting and resource exhaustion"""
@@ -524,12 +565,19 @@ class AIExtractor:
 
                 # Check for rate limiting / resource exhausted
                 if response.status_code in (429, 503, 529):
-                    error_text = response.text.lower()
                     if attempt < max_retries:
-                        # Exponential backoff: 2s, 4s, 8s, 16s...
-                        wait_time = min(2 ** (attempt + 1), 30)
+                        # Check for retry-after header (Nebius sends this)
+                        retry_after = response.headers.get('retry-after')
+                        if retry_after:
+                            try:
+                                wait_time = min(float(retry_after), 60)
+                            except ValueError:
+                                wait_time = min(2 ** (attempt + 1), 30)
+                        else:
+                            # Exponential backoff: 2s, 4s, 8s, 16s... (max 30s)
+                            wait_time = min(2 ** (attempt + 1), 30)
                         if self.config and self.config.verbose:
-                            print(f"    ⏳ Rate limited (attempt {attempt + 1}), waiting {wait_time}s...")
+                            print(f"    ⏳ Rate limited (attempt {attempt + 1}/{max_retries}), waiting {wait_time:.0f}s...")
                         time.sleep(wait_time)
                         continue
                     else:
@@ -590,7 +638,7 @@ class AIExtractor:
         cfg: LLMConfig,
         mc: AIModelConfig
     ) -> Dict:
-        """Make request via HuggingFace Inference Provider"""
+        """Make request via HuggingFace Inference Provider with retry logic"""
         if not HF_AVAILABLE:
             raise ImportError("huggingface_hub not installed. Run: pip install huggingface_hub")
 
@@ -599,31 +647,60 @@ class AIExtractor:
             raise ValueError("HF_TOKEN environment variable not set")
 
         client = InferenceClient(provider=provider, api_key=api_key)
-
         img_data_url = f"data:image/png;base64,{img_base64}"
 
-        response = client.chat.completions.create(
-            model=model_id,
-            messages=[{
-                "role": "user",
-                "content": [
-                    {"type": "image_url", "image_url": {"url": img_data_url}},
-                    {"type": "text", "text": user_prompt}
-                ]
-            }],
-            max_tokens=cfg.max_tokens,
-            temperature=mc.parameters.temperature if mc else cfg.temperature,
-        )
+        max_retries = cfg.max_retries + 2  # Extra retries for rate limiting
+        last_error = None
 
-        # Convert HF response to standard format
-        content = response.choices[0].message.content
-        usage = response.usage
+        for attempt in range(max_retries + 1):
+            try:
+                response = client.chat.completions.create(
+                    model=model_id,
+                    messages=[{
+                        "role": "user",
+                        "content": [
+                            {"type": "image_url", "image_url": {"url": img_data_url}},
+                            {"type": "text", "text": user_prompt}
+                        ]
+                    }],
+                    max_tokens=cfg.max_tokens,
+                    temperature=mc.parameters.temperature if mc else cfg.temperature,
+                )
 
-        return {
-            "choices": [{"message": {"content": content}}],
-            "usage": {
-                "prompt_tokens": usage.prompt_tokens if usage else 0,
-                "completion_tokens": usage.completion_tokens if usage else 0,
-                "total_tokens": (usage.prompt_tokens + usage.completion_tokens) if usage else 0,
-            }
-        }
+                # Convert HF response to standard format
+                content = response.choices[0].message.content
+                usage = response.usage
+
+                return {
+                    "choices": [{"message": {"content": content}}],
+                    "usage": {
+                        "prompt_tokens": usage.prompt_tokens if usage else 0,
+                        "completion_tokens": usage.completion_tokens if usage else 0,
+                        "total_tokens": (usage.prompt_tokens + usage.completion_tokens) if usage else 0,
+                    }
+                }
+
+            except Exception as e:
+                last_error = e
+                error_str = str(e).lower()
+
+                # Retry on rate limiting (429) or server errors (5xx)
+                if '429' in error_str or 'rate' in error_str or '503' in error_str or '502' in error_str:
+                    if attempt < max_retries:
+                        wait_time = min(2 ** (attempt + 1), 30)
+                        if self.config and self.config.verbose:
+                            print(f"    ⏳ HF rate limited (attempt {attempt + 1}/{max_retries}), waiting {wait_time}s...")
+                        time.sleep(wait_time)
+                        continue
+
+                # Don't retry on payment/auth errors
+                if '402' in error_str or '401' in error_str or '403' in error_str:
+                    raise
+
+                # Retry other errors with shorter backoff
+                if attempt < cfg.max_retries:
+                    time.sleep(cfg.retry_delay_seconds)
+                    continue
+                raise
+
+        raise last_error

@@ -28,6 +28,10 @@ class APIEndpoint:
     api_key_env_var: str  # Environment variable name for API key
     headers_template: Dict[str, str] = field(default_factory=dict)
     notes: str = ""
+    max_payload_mb: float = 0  # Max request payload size (0 = no limit). Uses JPEG compression if exceeded.
+    max_parallel_requests: int = 5  # Max concurrent requests to this endpoint
+    image_format: str = "png"  # Image format: png, webp_lossless, webp_lossy, jpeg
+    image_quality: int = 90  # Quality for lossy formats (1-100)
 
     def get_chat_url(self) -> str:
         """Get the chat completions URL"""
@@ -45,7 +49,9 @@ ENDPOINTS = {
             "Authorization": "Bearer {api_key}",
             "Content-Type": "application/json",
         },
-        notes="EU-based endpoint for GDPR compliance"
+        notes="EU-based endpoint for GDPR compliance",
+        max_parallel_requests=5,  # 5 EU regions for quota pooling
+        image_format="png",  # PNG for Gemini (best compatibility)
     ),
     "nebius_eu": APIEndpoint(
         name="Nebius EU",
@@ -56,7 +62,25 @@ ENDPOINTS = {
             "Authorization": "Bearer {api_key}",
             "Content-Type": "application/json",
         },
-        notes="EU-based endpoint for GDPR compliance, supports Gemma 3 27B and Qwen VL 72B"
+        notes="EU-based endpoint for GDPR compliance, supports Gemma 3 27B and Qwen VL 72B",
+        max_parallel_requests=20,  # Nebius supports high parallelism (tested 20+)
+        image_format="webp_lossy",  # WEBP lossy: fast encoding, small files
+        image_quality=75,
+    ),
+    "huggingface": APIEndpoint(
+        name="HuggingFace Inference",
+        base_url="https://router.huggingface.co/v1",
+        region=EndpointRegion.US,  # HuggingFace routes to various providers
+        api_key_env_var="HF_TOKEN",
+        headers_template={
+            "Authorization": "Bearer {api_key}",
+            "Content-Type": "application/json",
+        },
+        notes="HuggingFace Inference Providers API - routes to various providers (Novita, etc.)",
+        max_payload_mb=10.0,  # HuggingFace has ~10MB payload limit
+        max_parallel_requests=10,  # Conservative for HuggingFace
+        image_format="webp_lossy",
+        image_quality=75,
     ),
 }
 
@@ -237,11 +261,11 @@ MODEL_CONFIGS: Dict[str, AIModelConfig] = {
         model_id="qwen_vl_72b",
         name="Qwen2.5 VL 72B Instruct",
         endpoint_id="nebius_eu",
-        model_id_at_endpoint="Qwen/Qwen2.5-VL-72B-Instruct",  # Model ID for Nebius API
+        model_id_at_endpoint="Qwen/Qwen2.5-VL-72B-Instruct",  # Qwen2.5-VL on Nebius
         parameters=ModelParameters(temperature=0.1),
         pricing=TokenPricing(
-            input_cost_per_1m=0.25,     # $0.25 per 1M input tokens (Nebius listed pricing)
-            output_cost_per_1m=0.75,    # $0.75 per 1M output tokens (Nebius listed pricing)
+            input_cost_per_1m=0.13,     # $0.13 per 1M input tokens (Nebius pricing)
+            output_cost_per_1m=0.40,    # $0.40 per 1M output tokens (Nebius pricing)
             image_tokens_estimate=1500,  # ~1500 tokens per page image (VL models use more)
         ),
         accuracy=0,  # Unknown - needs testing
@@ -250,7 +274,47 @@ MODEL_CONFIGS: Dict[str, AIModelConfig] = {
         supports_checkboxes=True,
         supports_radio=True,
         supports_text=True,
-        notes="Powerful vision-language model from Alibaba. GDPR compliant (EU via Nebius). Nebius listed pricing: $0.25/1M input, $0.75/1M output (actual costs reported by API may differ). Needs prompt tuning and accuracy testing."
+        notes="Powerful vision-language model from Alibaba. GDPR compliant (EU via Nebius). Slow but accurate."
+    ),
+    # Note: Qwen2.5-VL-7B-Instruct is NOT available on Nebius (404)
+    # Only qwen_vl_72b (Qwen2.5-VL-72B-Instruct) is available
+    "qwen3_vl_8b": AIModelConfig(
+        model_id="qwen3_vl_8b",
+        name="Qwen3 VL 8B Instruct",
+        endpoint_id="huggingface",
+        model_id_at_endpoint="Qwen/Qwen3-VL-8B-Instruct",  # Model ID for HuggingFace API (via Novita)
+        parameters=ModelParameters(temperature=0.0),  # 0.0 for deterministic output
+        pricing=TokenPricing(
+            input_cost_per_1m=0.06,     # $0.06 per 1M input tokens (HuggingFace/Novita pricing)
+            output_cost_per_1m=0.40,    # $0.40 per 1M output tokens (HuggingFace/Novita pricing)
+            image_tokens_estimate=2000,  # ~2000 tokens per page image
+        ),
+        accuracy=0,  # Needs testing - initial test shows good radio button detection
+        context_window="131K tokens",  # Qwen3 VL context window
+        supports_vision=True,
+        supports_checkboxes=True,
+        supports_radio=True,  # Tested: correctly detected (x) getrouwd
+        supports_text=True,
+        notes="Vision-language model via HuggingFace/Novita. Cheap ($0.06/1M input, $0.40/1M output). 131K context. Initial testing shows good form extraction."
+    ),
+    "glm_4v_flash": AIModelConfig(
+        model_id="glm_4v_flash",
+        name="GLM-4.6V Flash",
+        endpoint_id="huggingface",
+        model_id_at_endpoint="zai-org/GLM-4.6V-Flash:novita",  # Model ID with provider suffix
+        parameters=ModelParameters(temperature=0.0),  # 0.0 for deterministic output
+        pricing=TokenPricing(
+            input_cost_per_1m=0.0,      # Free tier / pricing TBD
+            output_cost_per_1m=0.0,     # Free tier / pricing TBD
+            image_tokens_estimate=2800,  # ~2800 tokens per page image based on test
+        ),
+        accuracy=0,  # Needs testing - initial test shows excellent form extraction
+        context_window="65K tokens",  # GLM-4.6V context window
+        supports_vision=True,
+        supports_checkboxes=True,
+        supports_radio=True,  # Tested: correctly detected (x) getrouwd
+        supports_text=True,
+        notes="Vision-language model via HuggingFace/Novita. Excellent form extraction with fewer tokens than Qwen3. Pricing TBD - check HF billing."
     ),
 }
 
@@ -291,6 +355,11 @@ MODEL_ALIASES = {
     "gemma": "gemma_3_27b",
     "qwen": "qwen_vl_72b",
     "qwen_vl": "qwen_vl_72b",
+    "qwen72b": "qwen_vl_72b",
+    "qwen3": "qwen3_vl_8b",
+    "qwen3_vl": "qwen3_vl_8b",
+    "glm": "glm_4v_flash",
+    "glm4": "glm_4v_flash",
 }
 
 

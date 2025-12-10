@@ -20,13 +20,20 @@ from .prompts import (
     get_system_prompt,
 )
 from .extractor import AIExtractor
-from .processor import PDFProcessor, HybridPDFProcessor
+from .processor import PDFProcessor
 from .analyzer import PDFAnalyzer
 from .validator import (
     OutputValidator,
     ValidationResult,
     ValidationIssue,
     ValidationSeverity,
+)
+from .errors import (
+    ExtractionError,
+    BatchResult,
+    PageResult,
+    PageError,
+    ErrorType,
 )
 
 __all__ = [
@@ -55,6 +62,11 @@ __all__ = [
     # Classes
     "AIExtractor",
     "PDFProcessor",
-    "HybridPDFProcessor",  # Backwards compatibility
     "PDFAnalyzer",
+    # Errors
+    "ExtractionError",
+    "BatchResult",
+    "PageResult",
+    "PageError",
+    "ErrorType",
 ]
