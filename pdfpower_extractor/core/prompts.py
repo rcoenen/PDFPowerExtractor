@@ -265,6 +265,41 @@ Output ONLY the markdown. No explanations or commentary."""
 # PROMPT REGISTRY (Model-specific prompt mappings)
 # =============================================================================
 
+# =============================================================================
+# GLM PROMPTS (simplified, no DOC IDENTITY rules)
+# =============================================================================
+#
+# ISSUE: GLM-4.6V-Flash gets confused by Gemini-specific rules like:
+# - "ALWAYS extract DOC IDENTITY headers FIRST"
+# - Complex date parsing rules
+# - Skip specific headers
+#
+# SOLUTION: Simplified prompts focused on pure content extraction
+# RESULT: Full extraction on all page types (tested 2025-12-12)
+#
+
+GLM_SYSTEM_PROMPT = """You are a form data extractor. Extract content from images as Github-flavored markdown."""
+
+GLM_VISION_PROMPT = """Extract all content from this page as Github-flavored markdown.
+
+FORMAT:
+- Headings: Use ## for main sections, ### for sub-sections
+- Text: Copy verbatim, preserve all content
+- Lists: Use bullet points (-)
+- Radio buttons: (x) for selected, ( ) for unselected
+- Checkboxes: [x] for checked, [ ] for unchecked
+- Field values: Use backticks `value`
+- Empty fields: Use empty backticks ``
+
+RADIO BUTTONS - LOOK CAREFULLY:
+Look at each circle/button carefully. The FILLED one (has ink inside) is selected.
+Mark selected as (x), unselected as ( ). Only ONE should be marked (x) per group.
+
+For dates: If you see boxes like |1|1| |1|2| |1|9|9|6|, combine them: `11-12-1996`
+
+Output ONLY the markdown. No explanations."""
+
+
 # Default prompts (used for unknown models and Gemini)
 DEFAULT_PROMPTS = (GEMINI_SYSTEM_PROMPT, GEMINI_VISION_PROMPT)
 
@@ -287,6 +322,18 @@ MODEL_PROMPTS = {
     # Qwen VL models - explicit constants (currently Gemma-style prompts)
     "qwen": (QWEN_SYSTEM_PROMPT, QWEN_VISION_PROMPT),
     "qwen2.5": (QWEN_SYSTEM_PROMPT, QWEN_VISION_PROMPT),
+
+    # GLM Flash models - use simplified prompts (9B lightweight model needs simpler instructions)
+    "glm_4v_flash": (GLM_SYSTEM_PROMPT, GLM_VISION_PROMPT),
+    "glm_4v_flash_gateway": (GLM_SYSTEM_PROMPT, GLM_VISION_PROMPT),
+    "glm_4v_flash_zai": (GLM_SYSTEM_PROMPT, GLM_VISION_PROMPT),
+
+    # GLM full models - use Gemini prompts (106B model can handle complex instructions)
+    "glm_4v_gateway": (GEMINI_SYSTEM_PROMPT, GEMINI_VISION_PROMPT),
+    "glm": (GEMINI_SYSTEM_PROMPT, GEMINI_VISION_PROMPT),
+    "glm4": (GEMINI_SYSTEM_PROMPT, GEMINI_VISION_PROMPT),
+    "glm_gateway": (GLM_SYSTEM_PROMPT, GLM_VISION_PROMPT),  # Keep simple for gateway default
+    "glm_zai": (GLM_SYSTEM_PROMPT, GLM_VISION_PROMPT),  # Keep simple for Z.AI default
 }
 
 
@@ -294,7 +341,7 @@ MODEL_PROMPTS = {
 # PROMPT SELECTION (Model-specific)
 # =============================================================================
 
-def _get_model_prompts(model: str = None) -> tuple:
+def _get_model_prompts(model: str | None = None) -> tuple:
     """
     Get model-specific prompts (system, vision).
 
@@ -318,13 +365,13 @@ def _get_model_prompts(model: str = None) -> tuple:
     return DEFAULT_PROMPTS
 
 
-def get_system_prompt(model: str = None, use_markdown: bool = True) -> str:
+def get_system_prompt(model: str | None = None, use_markdown: bool = True) -> str:
     """Get the system prompt for a model"""
     system_prompt, _ = _get_model_prompts(model)
     return system_prompt
 
 
-def get_vision_prompt(model: str = None, use_markdown: bool = True) -> str:
+def get_vision_prompt(model: str | None = None, use_markdown: bool = True) -> str:
     """Get the vision extraction prompt for a model"""
     _, vision_prompt = _get_model_prompts(model)
     return vision_prompt

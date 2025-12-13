@@ -17,6 +17,7 @@ class EndpointRegion(Enum):
     """Geographic region for data processing compliance"""
     US = "us"
     EU = "eu"
+    CHINA = "china"
 
 
 @dataclass
@@ -63,7 +64,7 @@ ENDPOINTS = {
             "Content-Type": "application/json",
         },
         notes="EU-based endpoint for GDPR compliance, supports Gemma 3 27B and Qwen VL 72B",
-        max_parallel_requests=20,  # Nebius supports high parallelism (tested 20+)
+        max_parallel_requests=40,  # Nebius supports high parallelism (tested 40)
         image_format="webp_lossy",  # WEBP lossy: fast encoding, small files
         image_quality=75,
     ),
@@ -79,6 +80,35 @@ ENDPOINTS = {
         notes="HuggingFace Inference Providers API - routes to various providers (Novita, etc.)",
         max_payload_mb=10.0,  # HuggingFace has ~10MB payload limit
         max_parallel_requests=10,  # Conservative for HuggingFace
+        image_format="webp_lossy",
+        image_quality=75,
+    ),
+    "llm_gateway": APIEndpoint(
+        name="LLM Gateway",
+        base_url="https://api.llmgateway.io/v1",
+        region=EndpointRegion.US,
+        api_key_env_var="LLM_GATEWAY_API_KEY",
+        headers_template={
+            "Authorization": "Bearer {api_key}",
+            "Content-Type": "application/json",
+        },
+        notes="LLM Gateway US endpoint - Acts as proxy/router to Z.AI for GLM models. NOT GDPR compliant. Uses standard OpenAI-compatible API format.",
+        max_parallel_requests=20,
+        image_format="webp_lossy",
+        image_quality=75,
+    ),
+    "z_ai": APIEndpoint(
+        name="Z.AI",
+        base_url="https://api.z.ai/api/paas/v4",
+        region=EndpointRegion.CHINA,
+        api_key_env_var="Z_AI_API_KEY",
+        headers_template={
+            "Authorization": "Bearer {api_key}",
+            "Content-Type": "application/json",
+            "Accept-Language": "en-US,en",
+        },
+        notes="Z.AI direct endpoint for GLM models. China-based - NOT GDPR compliant. Also accessible via LLM Gateway proxy. Uses /api/paas/v4/chat/completions. GLM-4.6V-Flash has concurrency limit of 3. Note: Complex prompts with PAGE_TYPE classification degrade quality under concurrent load - use simplified prompts.",
+        max_parallel_requests=3,  # Concurrent mode (simplified prompts only)
         image_format="webp_lossy",
         image_quality=75,
     ),
@@ -169,7 +199,7 @@ class AIModelConfig:
 
     # Endpoint
     endpoint_id: str                  # Key in ENDPOINTS dict
-    model_id_at_endpoint: str = None  # Model ID to send to the API
+    model_id_at_endpoint: str | None = None  # Model ID to send to the API
 
     # Parameters
     parameters: ModelParameters = field(default_factory=ModelParameters)
@@ -316,6 +346,63 @@ MODEL_CONFIGS: Dict[str, AIModelConfig] = {
         supports_text=True,
         notes="Vision-language model via HuggingFace/Novita. Excellent form extraction with fewer tokens than Qwen3. Pricing TBD - check HF billing."
     ),
+    "glm_4v_flash_gateway": AIModelConfig(
+        model_id="glm_4v_flash_gateway",
+        name="GLM-4.6V Flash (LLM Gateway)",
+        endpoint_id="llm_gateway",
+        model_id_at_endpoint="glm-4.6v-flash",
+        parameters=ModelParameters(temperature=0.0),
+        pricing=TokenPricing(
+            input_cost_per_1m=0.0,
+            output_cost_per_1m=0.0,
+            image_tokens_estimate=2800,
+        ),
+        accuracy=0,
+        context_window="65K tokens",
+        supports_vision=True,
+        supports_checkboxes=True,
+        supports_radio=True,
+        supports_text=True,
+        notes="FREE GLM-4.6V-Flash via LLM Gateway proxy → Z.AI backend. Free tier has concurrency limits causing quality degradation on multi-page. US proxy endpoint - NOT GDPR compliant (data processed in China)."
+    ),
+    "glm_4v_gateway": AIModelConfig(
+        model_id="glm_4v_gateway",
+        name="GLM-4.6V (LLM Gateway - Paid)",
+        endpoint_id="llm_gateway",
+        model_id_at_endpoint="glm-4.6v",
+        parameters=ModelParameters(temperature=0.0),
+        pricing=TokenPricing(
+            input_cost_per_1m=540.0,  # $0.54/M
+            output_cost_per_1m=810.0,  # $0.81/M
+            image_tokens_estimate=2800,
+        ),
+        accuracy=0,
+        context_window="128K tokens",
+        supports_vision=True,
+        supports_checkboxes=True,
+        supports_radio=True,
+        supports_text=True,
+        notes="PAID GLM-4.6V (non-Flash) via LLM Gateway proxy → Z.AI backend. Paid tier has better reliability and unlimited concurrency. US proxy endpoint - NOT GDPR compliant (data processed in China)."
+    ),
+    "glm_4v_flash_zai": AIModelConfig(
+        model_id="glm_4v_flash_zai",
+        name="GLM-4.6V Flash (Z.AI)",
+        endpoint_id="z_ai",
+        model_id_at_endpoint="glm-4.6v-flash",
+        parameters=ModelParameters(temperature=0.0),
+        pricing=TokenPricing(
+            input_cost_per_1m=0.60,  # Paid model pricing
+            output_cost_per_1m=0.11,
+            image_tokens_estimate=2800,
+        ),
+        accuracy=0,
+        context_window="128K tokens",
+        supports_vision=True,
+        supports_checkboxes=True,
+        supports_radio=True,
+        supports_text=True,
+        notes="GLM-4.6V-Flash direct to Z.AI (bypasses LLM Gateway proxy). Same backend as LLM Gateway GLM models. Has multi-page quality degradation issues. China-based - NOT GDPR compliant. Requires Z_AI_API_KEY."
+    ),
 }
 
 
@@ -360,10 +447,12 @@ MODEL_ALIASES = {
     "qwen3_vl": "qwen3_vl_8b",
     "glm": "glm_4v_flash",
     "glm4": "glm_4v_flash",
+    "glm_gateway": "glm_4v_flash_gateway",
+    "glm_zai": "glm_4v_flash_zai",
 }
 
 
-def get_model_config(model_id: str = None) -> AIModelConfig:
+def get_model_config(model_id: str | None = None) -> AIModelConfig:
     """Get model config by ID or alias (defaults to gemini_flash)"""
     if model_id is None:
         model_id = DEFAULT_MODEL
