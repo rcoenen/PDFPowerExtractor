@@ -563,8 +563,8 @@ class AIExtractor:
                     timeout=cfg.timeout_seconds
                 )
 
-                # Check for rate limiting / resource exhausted
-                if response.status_code in (429, 503, 529):
+                  # Check for rate limiting / resource exhausted / server errors
+                if response.status_code in (429, 500, 503, 529):
                     if attempt < max_retries:
                         # Check for retry-after header (Nebius sends this)
                         retry_after = response.headers.get('retry-after')

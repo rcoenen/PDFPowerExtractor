@@ -1,0 +1,45 @@
+Gemma 3 27B - Page 5 - Simplified Prompts
+PDF: test_b07001_filled_flat_008.pdf
+Timestamp: N/A
+================================================================================
+
+
+================================================================================
+=== Page 5 (AI Processed) ===
+================================================================================
+## 2. Uw gegevens
+
+U bent de referent. Dit is de persoon die een buitenlandse partner naar Nederland laat komen. De gegevens die u invult, moeten hetzelfde zijn als in uw paspoort. Hebt u een verblijfsvergunning (aangevraagd)? Dan hebt u een V-nummer. Dit nummer staat in brieven van de IND.
+
+*   **2.1 Bsn (als u dat hebt)** `123456789`
+*   **2.2 V-nummer (als u dat hebt)** 
+*   **2.3 Achternaam** `Coenen`
+*   **2.4 Voornamen** `Robert Willem Gerrit`
+*   **2.5 Geslacht** `Man`
+*   **2.6 Nationaliteit** `Netherlands`
+*   **2.6 Hebt u (ook) de Turkse nationaliteit?**
+    *   ○ ja
+    *   ● nee
+*   **2.7 Burgerlijke staat**
+    *   ● getrouwd
+    *   ○ geregistreerd partnerschap
+    *   ○ niet getrouwd (alleenstaand of relatie met of zonder samenwonen)
+    *   ○ gescheiden
+    *   ○ weduwe de weduwnaar
+*   **2.8 Verblijfsstatus**
+    *   ● Nederlandse nationaliteit
+    *   ○ verblijfsvergunning voor arbeid in loondienst
+    *   ○ geprivilegieerd
+    *   ○ verblijfsvergunning voor studie
+    *   ○ verblijfsvergunning voor asiel
+    *   ○ verblijfsvergunning EU-mobiliteit
+    *   ○ verblijfsvergunning anders
+    *   ○ vergunning aangevraagd en in behandeling
+    *   ○ geen
+*   **2.9 Straat en huisnummer** `Kalverstraat 92 A`
+*   **2.10 Postcode en plaats** `1012PH Amsterdam`
+*   **2.11 Land** `Nederland`
+*   **2.11 Telefoonnummer** `+31570562370`
+*   **2.11 E-mail** `coenen.rob@gmail.com`
+
+B07001/2

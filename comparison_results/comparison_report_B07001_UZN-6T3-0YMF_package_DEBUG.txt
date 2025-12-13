@@ -1,0 +1,13 @@
+Gemma vs Gemini Comparison Report
+============================================================
+PDF: B07001_UZN-6T3-0YMF_package_DEBUG.pdf
+Date: 2025-12-07 15:46:58
+
+Similarity Score: 9.8%
+Gemini Cost: $0.009341
+Gemma Cost: $0.005343
+Cost Difference: $-0.003998
+
+Output Files:
+  Gemini: /Users/rob/Dev/PDFPowerExtractor/comparison_results/B07001_UZN-6T3-0YMF_package_DEBUG_gemini_flash.md
+  Gemma: /Users/rob/Dev/PDFPowerExtractor/comparison_results/B07001_UZN-6T3-0YMF_package_DEBUG_gemma_3_27b.md

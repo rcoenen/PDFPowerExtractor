@@ -103,6 +103,7 @@ class PDFProcessor:
         audit_log_path: Optional[str] = None,
         audit_log_hook: Optional[Callable[[Dict[str, Any]], None]] = None,
         audit_retention_hours: Optional[int] = 24,
+        selected_pages: Optional[List[int]] = None,
     ) -> str:
         """
         Process the PDF using AI vision extraction.
@@ -148,7 +149,20 @@ class PDFProcessor:
             summary = self.analyzer.analyze()
             total_pages = summary['total_pages']
             empty_pages = set(summary.get("empty_pages", []))
-            pages_to_process = [p for p in range(1, total_pages + 1) if p not in empty_pages]
+            # Determine which pages to process
+            if selected_pages:
+                # Use only the specified pages, but still exclude empty ones
+                pages_to_process = [p for p in selected_pages if 1 <= p <= total_pages and p not in empty_pages]
+                if pages_to_process != selected_pages:
+                    excluded = set(selected_pages) - set(pages_to_process)
+                    for page in excluded:
+                        if page > total_pages:
+                            print(f"[WARNING] Page {page} exceeds document length ({total_pages} pages) - skipping")
+                        elif page in empty_pages:
+                            print(f"[WARNING] Page {page} is empty - skipping")
+            else:
+                # Process all non-empty pages
+                pages_to_process = [p for p in range(1, total_pages + 1) if p not in empty_pages]
 
             if self.config.verbose:
                 print(f"[INFO] Model: {self.model_config.name}")
@@ -324,8 +338,8 @@ class PDFProcessor:
                     toc_comment = f"<!-- TOC PAGE_{page_num:02d}: {page_summary} -->"
                     merged_content.append(f"{toc_comment}\n{header}\n{image_comment}\n{normalized}".rstrip() + "\n")
 
-            # Create header
-            file_header = self._create_header(summary, total_cost, extra_metadata)
+            # Create header with actual pages processed count
+            file_header = self._create_header(summary, total_cost, extra_metadata, len(pages_to_process))
             toc_block = self._build_top_level_toc(toc_entries)
 
             final_output = file_header + toc_block + '\n'.join(merged_content)
@@ -523,7 +537,7 @@ class PDFProcessor:
 
         return "Empty page"
 
-    def _create_header(self, summary: Dict, cost: float, extra_metadata: Optional[str] = None) -> str:
+    def _create_header(self, summary: Dict, cost: float, extra_metadata: Optional[str] = None, pages_processed: Optional[int] = None) -> str:
         """Create extraction result header as hidden HTML comment"""
         from ..models.config import MODEL_CONFIGS
 
@@ -561,7 +575,7 @@ class PDFProcessor:
             "",
             "Processing Summary:",
             f"- Total pages: {summary['total_pages']}",
-            f"- AI processed: {summary['total_pages'] - len(summary.get('empty_pages', []))} pages",
+            f"- AI processed: {pages_processed} pages",
             f"- Empty pages: {len(summary.get('empty_pages', []))}",
             "",
             "Token Usage:",

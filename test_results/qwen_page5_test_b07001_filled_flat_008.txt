@@ -1,0 +1,58 @@
+Qwen2.5 VL 72B - Page 5 - Simplified Prompts
+PDF: test_b07001_filled_flat_008.pdf
+Timestamp: N/A
+================================================================================
+
+
+================================================================================
+=== Page 5 (AI Processed) ===
+================================================================================
+## 2. Uw gegevens
+
+### Personal Information
+
+- **Bsn (als u dat hebt):** `123456789`
+- **V-nummer (als u dat hebt):** 
+- **Achternaam:** `Coenen`
+- **Voornamen:** `Robert Willem Gerrit`
+- **Geslacht:** `Man`
+- **Nationaliteit:** `Netherlands`
+
+### Nationality
+
+- **Hebt u (ook) de Turkse nationaliteit?**
+  - ( ) ja
+  - (x) nee
+
+### Marital Status
+
+- **Burgerlijke staat:**
+  - (x) getrouwd
+  - ( ) geregistreerd partnerschap
+  - ( ) niet getrouwd (alleenstaand of relatie met of zonder samenwonen)
+  - ( ) gescheiden
+  - ( ) weduwe of weduwnaar
+
+### Residence Status
+
+- **Verblijfsstatus:**
+  - (x) Nederlandse nationaliteit
+  - ( ) verblijfsvergunning voor arbeid in loondienst
+  - ( ) verblijfsvergunning voor studie
+  - ( ) verblijfsvergunning voor asiel
+  - ( ) verblijfsvergunning EU-mobiliteit
+  - ( ) verblijfsvergunning anders
+  - ( ) vergunning aangevraagd en in behandeling
+  - ( ) geprivilegieerd
+  - ( ) geen
+
+### Address
+
+- **Straat en huisnummer:** `Kalverstraat 92 A`
+- **Postcode en plaats:** `1012PH Amsterdam`
+- **Land:** `Nederland`
+
+### Contact Information
+
+- **Telefoonnummer:** `+31570562370`
+- **E-mail:** `coenen.rob@gmail.com`

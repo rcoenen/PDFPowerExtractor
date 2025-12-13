@@ -247,6 +247,11 @@ Hidden metadata:
 - A grouped TOC block is inserted right after the metadata header (before page content), wrapped in HTML comments (`<!-- TOC START --> ... <!-- TOC END -->`) so it remains hidden while keeping page-order summaries together.
 - If you need to add your own metadata, pass it as a multi-line string to `PDFProcessor.process(extra_metadata="...")`; it will be placed inside the single metadata comment under `EXTRA METADATA` (no nested `<!-- ... -->` blocks).
 
+### Audit logging (optional)
+- Off by default. Enable by setting `PDFPOWER_AUDIT_LOG=/path/to/extraction-audit.log` (default path recommendation: `~/.pdfpower/logs/extraction-audit.log`).
+- Optional retention window via `PDFPOWER_AUDIT_RETENTION_HOURS` (default 24 when logging is enabled; set to empty/omit to disable pruning).
+- Each run appends a JSON line with file name, MD5, model, provider, timestamps, status, and error (on failure). You can also provide `audit_log_path` / `audit_log_hook` directly to `PDFProcessor.process(...)`.
+
 ## 🤝 Contributing
 
 Contributions are welcome! Please read our contributing guidelines and submit PRs.

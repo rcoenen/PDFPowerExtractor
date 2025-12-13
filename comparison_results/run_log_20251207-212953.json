@@ -1,0 +1,23 @@
+{
+  "gemini_flash": {
+    "duration_seconds": 29.894776105880737,
+    "cost": 0.0094,
+    "output_file": "comparison_results/B07001_gemini_flash_20251207-212708.md",
+    "returncode": 0,
+    "notes": "Completed successfully"
+  },
+  "gemma_3_27b": {
+    "duration_seconds": 120,
+    "cost": null,
+    "output_file": null,
+    "returncode": null,
+    "notes": "Timed out after 120s with no output (likely waiting on Nebius Gemma response)"
+  },
+  "qwen_vl_72b": {
+    "duration_seconds": 120,
+    "cost": null,
+    "output_file": null,
+    "returncode": null,
+    "notes": "Timed out after 120s with no output (likely waiting on Nebius Qwen response)"
+  }
+}

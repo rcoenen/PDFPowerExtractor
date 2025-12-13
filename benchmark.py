@@ -9,7 +9,7 @@ from dotenv import load_dotenv
 
 load_dotenv()
 
-from pdfpower_extractor import HybridPDFProcessor
+from pdfpower_extractor import PDFProcessor
 from pdfpower_extractor.core import gemini_flash_config, qwen_vl_config, ExtractionMode
 
 # Use the test PDF
@@ -20,7 +20,7 @@ def run_benchmark(name: str, config):
     config.verbose = False  # Less noise during benchmark
     config.force_ai_extraction = True
 
-    processor = HybridPDFProcessor(PDF_PATH, config=config)
+    processor = PDFProcessor(PDF_PATH, config=config)
 
     start = time.time()
     result = processor.process()

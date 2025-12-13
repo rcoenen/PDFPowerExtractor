@@ -1,0 +1,3 @@
+📄 Processing: test_b07001_filled_flat_013.pdf
+🤖 Using model: glm_4v_flash_gateway
+Processing

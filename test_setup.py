@@ -50,7 +50,7 @@ print("-" * 50)
 
 # Check local modules
 try:
-    from core.processor import HybridPDFProcessor
+    from core.processor import PDFProcessor
     from core.analyzer import PDFAnalyzer
     from core.extractor import TextExtractor, AIExtractor
     from models.config import MODEL_CONFIGS, DEFAULT_MODEL
