@@ -246,12 +246,38 @@ OUTPUT FORMAT:
    - Postcode en plaats: `1234AB City`
    - Land: `Netherlands`
 
+6. CONDITIONAL NAVIGATION / BOXED INSTRUCTIONS:
+   CRITICAL: Forms often have navigation instructions after radio button options.
+   Look CAREFULLY after EACH radio button option for ANY text that includes:
+   - Arrow symbols: "→" or "►" or ">"
+   - Words like: "ga naar vraag", "Ga naar", "go to question"
+   - Conditional phrases: "als" (if), "anders" (otherwise)
+
+   These instructions may appear:
+   - In a box/frame around the text
+   - With different background shading
+   - Indented or separated from the main option text
+   - On the same line or line below the option
+
+   SCAN THE ENTIRE AREA around each radio option - don't stop reading after the option text!
+
+   Format navigation instructions as indented lines under the option:
+   - (x) eerste verblijfsvergunning: uw partner heeft de laatste 2 jaar geen verblijfsvergunning in Nederland gehad.
+     → Ga naar vraag 5 als uw partner een mvv-plichtige nationaliteit heeft.
+     → Ga anders naar vraag 12.
+   - ( ) verlenging verblijfsvergunning: uw partner heeft een verblijfsvergunning voor verblijf bij u en u wilt deze verlengen.
+     → ga naar vraag 9
+
 RULES:
 - Use (x) for SELECTED radio buttons, ( ) for unselected
 - Use [x] for CHECKED checkboxes, [ ] for unchecked
 - Put field values in backticks: `value`
 - Empty fields get empty backticks: ``
 - Copy all text VERBATIM - do not translate or summarize
+- **CRITICAL**: Extract ALL boxed/highlighted navigation instructions with arrows (→)
+- **CRITICAL**: Extract ALL conditional routing text ("Ga naar vraag...", "→ ga naar...")
+- **CRITICAL**: After extracting a radio option, scan the area BELOW it for any boxed text before moving to the next option
+- **CRITICAL**: Boxed navigation instructions may appear BETWEEN radio options - don't skip them!
 - DATES: For date fields (Geboortedatum, datum, Geldig van/tot, etc.):
   - If you see individual digit boxes (like |1|0| |0|3| |2|0|2|1|), read EACH box separately and combine: Dag=`10`, Maand=`03`, Jaar=`2021`
   - For 8 consecutive digits like DDMMYYYY, insert dashes: `DD-MM-YYYY`. Example: "11121996" becomes `11-12-1996`
